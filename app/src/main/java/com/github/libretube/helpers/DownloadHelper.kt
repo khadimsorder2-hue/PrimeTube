@@ -72,15 +72,52 @@ object DownloadHelper {
                 arguments = bundleOf(IntentData.videoId to videoId)
             }.show(fragmentManager, DownloadDialog::class.java.name)
         } else {
-            val intent = Intent(Intent.ACTION_VIEW)
-                .setPackage(externalProviderPackageName)
-                .setDataAndType(
-                    "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId".toUri(),
-                    VIDEO_MIMETYPE
-                )
-
-            runCatching { context.startActivity(intent) }
+            openInExternalDownloader(
+                context,
+                "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
+            )
         }
+    }
+
+    /**
+     * PrimeTube: hand a media URL to the configured external downloader (e.g. Seal).
+     *
+     * Tries in order until one succeeds:
+     * 1. ACTION_VIEW with the URL to the provider package
+     * 2. ACTION_SEND text/plain with the URL to the provider package
+     * 3. A generic Android share chooser as last-resort fallback
+     */
+    fun openInExternalDownloader(context: Context, url: String) {
+        val provider = PreferenceHelper.getString(
+            PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER,
+            ""
+        ).ifBlank { PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER }
+        val packageManager = context.packageManager
+
+        val viewIntent = Intent(Intent.ACTION_VIEW)
+            .setPackage(provider)
+            .setDataAndType(url.toUri(), VIDEO_MIMETYPE)
+        if (viewIntent.resolveActivity(packageManager) != null) {
+            runCatching { context.startActivity(viewIntent) }
+            return
+        }
+
+        val sendIntent = Intent(Intent.ACTION_SEND)
+            .setPackage(provider)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, url)
+        if (sendIntent.resolveActivity(packageManager) != null) {
+            runCatching { context.startActivity(sendIntent) }
+            return
+        }
+
+        val chooserIntent = Intent.createChooser(
+            Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_TEXT, url),
+            null
+        )
+        runCatching { context.startActivity(chooserIntent) }
     }
 
     fun startDownloadPlaylistDialog(
@@ -103,14 +140,10 @@ object DownloadHelper {
             }
             downloadPlaylistDialog.show(fragmentManager, null)
         } else if (playlistType == PlaylistType.PUBLIC) {
-            val intent = Intent(Intent.ACTION_VIEW)
-                .setPackage(externalProviderPackageName)
-                .setDataAndType(
-                    "${ShareDialog.YOUTUBE_FRONTEND_URL}/playlist?list=$playlistId".toUri(),
-                    VIDEO_MIMETYPE
-                )
-
-            runCatching { context.startActivity(intent) }
+            openInExternalDownloader(
+                context,
+                "${ShareDialog.YOUTUBE_FRONTEND_URL}/playlist?list=$playlistId"
+            )
         } else {
             CoroutineScope(Dispatchers.IO).launch {
                 val playlistVideoIds = try {
@@ -120,15 +153,11 @@ object DownloadHelper {
                     return@launch
                 }.relatedStreams.mapNotNull { it.url?.toID() }.joinToString(",")
 
-                val intent = Intent(Intent.ACTION_VIEW)
-                    .setPackage(externalProviderPackageName)
-                    .setDataAndType(
-                        "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch_videos?video_ids=${playlistVideoIds}".toUri(),
-                        VIDEO_MIMETYPE
-                    )
-
                 withContext(Dispatchers.Main) {
-                    runCatching { context.startActivity(intent) }
+                    openInExternalDownloader(
+                        context,
+                        "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch_videos?video_ids=${playlistVideoIds}"
+                    )
                 }
             }
         }

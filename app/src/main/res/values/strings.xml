@@ -526,7 +526,7 @@
     <string name="change">Change</string>
     <string name="gestures">Gestures</string>
     <string name="external_download_provider">External download provider</string>
-    <string name="external_download_provider_summary">Enter the package name of the app you want to use for downloading videos. Leave blank to use LibreTube\'s inbuilt downloader.</string>
+    <string name="external_download_provider_summary">Package name of the app that opens when you tap Download. Default: Seal (com.junkfood.seal). Leave blank to use PrimeTube\'s inbuilt downloader.</string>
     <string name="local_stream_extraction">Local stream extraction</string>
     <string name="local_stream_extraction_summary">Directly fetch video playback information from YouTube without using Piped.</string>
     <string name="local_ryd">Local Return Youtube Dislike extractor</string>

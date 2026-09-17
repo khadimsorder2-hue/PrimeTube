@@ -432,5 +432,11 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="*" />
         </intent>
+        <!-- PrimeTube: allow detecting external downloaders such as Seal -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <package android:name="com.junkfood.seal" />
     </queries>
 </manifest>

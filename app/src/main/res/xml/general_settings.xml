@@ -51,6 +51,7 @@
         <EditTextPreference
             android:icon="@drawable/ic_open"
             android:key="external_download_provider"
+            android:defaultValue="com.junkfood.seal"
             android:summary="@string/external_download_provider_summary"
             android:title="@string/external_download_provider" />
 
