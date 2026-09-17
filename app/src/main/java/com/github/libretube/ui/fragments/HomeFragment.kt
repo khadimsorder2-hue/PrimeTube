@@ -3,6 +3,7 @@ package com.github.libretube.ui.fragments
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.core.os.bundleOf
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -14,6 +15,7 @@ import com.github.libretube.api.MediaServiceRepository
 import com.github.libretube.api.TrendingCategory
 import com.github.libretube.api.obj.Playlists
 import com.github.libretube.api.obj.StreamItem
+import com.github.libretube.constants.IntentData
 import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.constants.PreferenceKeys.HOME_TAB_CONTENT
 import com.github.libretube.databinding.FragmentHomeBinding
@@ -29,6 +31,7 @@ import com.github.libretube.ui.models.TrendsViewModel
 import com.google.android.material.carousel.CarouselLayoutManager
 import com.google.android.material.carousel.CarouselSnapHelper
 import com.google.android.material.carousel.UncontainedCarouselStrategy
+import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 
@@ -110,6 +113,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             fetchHomeFeed()
         }
 
+        setupHomeChips()
+
         binding.trendingRegion.setOnClickListener {
             TrendsFragment.showChangeRegionDialog(requireContext()) {
                 fetchHomeFeed()
@@ -154,6 +159,40 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
 
         binding.changeInstance.setOnClickListener {
             redirectToIntentSettings()
+        }
+    }
+
+    /**
+     * PrimeTube: YouTube-like topic chips. Chips navigate to the trends screen
+     * with the matching category preselected.
+     */
+    private fun setupHomeChips() {
+        val chipCategories = mapOf(
+            R.id.chip_trending to null,
+            R.id.chip_music to TrendingCategory.MUSIC,
+            R.id.chip_gaming to TrendingCategory.GAMING,
+            R.id.chip_live to TrendingCategory.LIVE,
+            R.id.chip_podcasts to TrendingCategory.PODCASTS,
+            R.id.chip_trailers to TrendingCategory.TRAILERS
+        )
+
+        binding.chipAll.setOnClickListener {
+            binding.scroll.smoothScrollTo(0, 0)
+        }
+
+        chipCategories.forEach { (chipId, category) ->
+            val chip = binding.root.findViewById<Chip>(chipId) ?: return@forEach
+            chip.setOnClickListener {
+                val bundle = if (category != null) {
+                    bundleOf(IntentData.category to category)
+                } else {
+                    null
+                }
+                findNavController().navigate(
+                    R.id.action_homeFragment_to_trendsFragment,
+                    bundle
+                )
+            }
         }
     }
 

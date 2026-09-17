@@ -26,31 +26,82 @@
                 android:orientation="vertical"
                 android:paddingBottom="10dp">
 
-                <LinearLayout
-                    android:id="@+id/featuredTV"
+                <!-- PrimeTube: YouTube-like topic chips row -->
+                <HorizontalScrollView
+                    android:id="@+id/home_chips_scroll"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="?selectableItemBackground"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
-
-                    <TextView
-                        style="@style/HomeCategoryTitle"
-                        android:text="@string/featured"
-                        app:drawableEndCompat="@drawable/ic_arrow_right" />
-
-                </LinearLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/featuredRV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"
                     android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:orientation="horizontal"
-                    android:visibility="gone"
-                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                    tools:visibility="visible" />
+                    android:scrollbars="none">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/home_chips"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleLine="true"
+                        app:chipSpacingHorizontal="8dp">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_all"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/all" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_trending"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/chip_trending" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_music"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/music" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_gaming"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/gaming" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_live"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/live" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_podcasts"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/podcasts" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_trailers"
+                            style="@style/Widget.Material3.Chip.Assist"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:text="@string/trailers" />
+
+                    </com.google.android.material.chip.ChipGroup>
+
+                </HorizontalScrollView>
 
                 <LinearLayout
                     android:id="@+id/watchingTV"
@@ -76,6 +127,32 @@
                     android:orientation="horizontal"
                     android:visibility="gone"
                     app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+                <LinearLayout
+                    android:id="@+id/featuredTV"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="?selectableItemBackground"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        style="@style/HomeCategoryTitle"
+                        android:text="@string/featured"
+                        app:drawableEndCompat="@drawable/ic_arrow_right" />
+
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/featuredRV"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                    tools:visibility="visible" />
 
                 <LinearLayout
                     android:id="@+id/trendingTV"

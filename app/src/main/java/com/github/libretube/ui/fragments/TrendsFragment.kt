@@ -50,6 +50,16 @@ class TrendsFragment : Fragment(R.layout.fragment_trends) {
             tab.text = getString(category.titleRes)
         }.attach()
 
+        // PrimeTube: preselect the trending category passed from the Home chips
+        arguments?.serializable<TrendingCategory>(IntentData.category)?.let { requested ->
+            val index = categories.indexOf(requested)
+            if (index >= 0) {
+                val tab = binding.tabLayout.getTabAt(index)
+                tab?.select()
+                binding.pager.currentItem = index
+            }
+        }
+
         binding.trendingRegion.setOnClickListener {
             showChangeRegionDialog(requireContext()) {
                 adapter.getFragmentAt(binding.pager.currentItem)?.also {

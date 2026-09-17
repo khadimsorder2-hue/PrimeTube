@@ -337,6 +337,9 @@
     <string name="trends">Trends</string>
     <string name="featured">Featured</string>
     <string name="trending">What\'s trending now</string>
+    <string name="chip_trending" translatable="false">Trending</string>
+    <string name="low_ram_mode" translatable="false">Low RAM mode</string>
+    <string name="low_ram_mode_summary" translatable="false">Reduce memory usage on budget devices: smaller image cache, no crossfade and a smaller offline cache. Enabled automatically on low-RAM phones.</string>
     <string name="bookmarks">Bookmarks</string>
     <string name="bookmark">Bookmark</string>
     <string name="clear_bookmarks">Clear bookmarks</string>
