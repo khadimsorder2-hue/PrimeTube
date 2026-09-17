@@ -6,7 +6,7 @@
 
         <ListPreference
             android:icon="@drawable/ic_theme"
-            app:defaultValue="A"
+            app:defaultValue="D"
             app:entries="@array/themes"
             app:entryValues="@array/themesValue"
             app:key="theme_toggle"
@@ -22,7 +22,7 @@
 
         <ListPreference
             android:icon="@drawable/ic_color"
-            app:defaultValue="purple"
+            app:defaultValue="red"
             app:entries="@array/accents"
             app:entryValues="@array/accentsValue"
             app:key="accent_color"
