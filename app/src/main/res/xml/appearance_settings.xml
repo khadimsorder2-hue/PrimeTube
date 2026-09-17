@@ -20,6 +20,14 @@
             app:key="pure_theme"
             app:title="@string/pure_theme" />
 
+        <!-- PrimeTube: low-RAM mode for budget devices -->
+        <SwitchPreferenceCompat
+            android:icon="@drawable/ic_frame"
+            android:summary="@string/low_ram_mode_summary"
+            app:defaultValue="false"
+            app:key="low_ram_mode"
+            app:title="@string/low_ram_mode" />
+
         <ListPreference
             android:icon="@drawable/ic_color"
             app:defaultValue="red"

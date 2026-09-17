@@ -121,6 +121,7 @@ object PreferenceKeys {
      * provider is configured. Seal is a popular open-source yt-dlp frontend.
      */
     const val DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER = "com.junkfood.seal"
+    const val LOW_RAM_MODE = "low_ram_mode"
     const val FULL_LOCAL_MODE = "full_local_mode"
     const val LOCAL_RYD = "local_return_youtube_dislikes"
     const val LOCAL_STREAM_EXTRACTION = "local_stream_extraction"

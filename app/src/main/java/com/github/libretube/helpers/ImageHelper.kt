@@ -1,5 +1,6 @@
 package com.github.libretube.helpers
 
+import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -19,6 +20,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.memory.MemoryCache
 import coil3.toBitmap
 import com.github.libretube.BuildConfig
 import com.github.libretube.extensions.toAndroidUri
@@ -35,6 +37,12 @@ object ImageHelper {
     private val Context.coilFile get() = cacheDir.resolve("coil")
     private const val HTTP_SCHEME = "http"
 
+    // PrimeTube: bounded offline image caches for low-RAM devices (in bytes)
+    private const val LOW_RAM_DISK_CACHE_BYTES = 50L * 1024 * 1024
+    private const val DEFAULT_DISK_CACHE_BYTES = 250L * 1024 * 1024
+    private const val LOW_RAM_MEMORY_CACHE_PERCENT = 0.08
+    private const val DEFAULT_MEMORY_CACHE_PERCENT = 0.20
+
     /**
      * Initialize the image loader
      */
@@ -49,8 +57,14 @@ object ImageHelper {
             httpClient.addInterceptor(loggingInterceptor)
         }
 
+        // PrimeTube: low-RAM detection, either automatic or user-enforced
+        val activityManager = context.getSystemService<ActivityManager>()
+        val isLowRamDevice = activityManager?.isLowRamDevice == true ||
+            PreferenceHelper.getBoolean(PreferenceKeys.LOW_RAM_MODE, false)
+        val smoothUi = !isLowRamDevice && !DataSaverMode.isEnabled(context)
+
         imageLoader = ImageLoader.Builder(context)
-            .crossfade(true)
+            .crossfade(smoothUi)
             .components {
                 add(
                     OkHttpNetworkFetcherFactory(httpClient.build())
@@ -60,14 +74,28 @@ object ImageHelper {
                 diskCachePolicy(CachePolicy.ENABLED)
                 memoryCachePolicy(CachePolicy.ENABLED)
 
+                memoryCache(
+                    MemoryCache.Builder()
+                        .maxSizePercent(
+                            context,
+                            if (isLowRamDevice) LOW_RAM_MEMORY_CACHE_PERCENT else DEFAULT_MEMORY_CACHE_PERCENT
+                        )
+                        .build()
+                )
+
                 val storageManager = context.getSystemService<StorageManager>()!!
                 val availableCache = storageManager.getCacheQuotaBytes(
                     storageManager.getUuidForPath(context.coilFile)
                 )
+                val cacheCap = if (isLowRamDevice) {
+                    LOW_RAM_DISK_CACHE_BYTES
+                } else {
+                    DEFAULT_DISK_CACHE_BYTES
+                }
                 val diskCache = DiskCache.Builder()
                     .directory(context.coilFile)
                     // only use a certain percentage of the available cache size for images
-                    .maxSizeBytes(availableCache)
+                    .maxSizeBytes(minOf(availableCache, cacheCap))
                     .build()
                 diskCache(diskCache)
             }
