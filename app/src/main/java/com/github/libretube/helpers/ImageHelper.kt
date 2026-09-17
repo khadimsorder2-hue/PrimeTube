@@ -23,6 +23,7 @@ import coil3.request.crossfade
 import coil3.memory.MemoryCache
 import coil3.toBitmap
 import com.github.libretube.BuildConfig
+import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.extensions.toAndroidUri
 import com.github.libretube.util.DataSaverMode
 import kotlinx.coroutines.Dispatchers
