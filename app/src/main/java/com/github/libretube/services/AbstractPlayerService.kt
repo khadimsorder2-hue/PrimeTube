@@ -1,12 +1,15 @@
 package com.github.libretube.services
 
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import androidx.annotation.CallSuper
 import androidx.annotation.OptIn
+import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.os.bundleOf
 import androidx.core.os.postDelayed
@@ -25,9 +28,11 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.github.libretube.R
+import com.github.libretube.LibreTubeApp.Companion.PLAYER_CHANNEL_NAME
 import com.github.libretube.api.JsonHelper
 import com.github.libretube.api.obj.Segment
 import com.github.libretube.constants.IntentData
+import com.github.libretube.enums.NotificationId
 import com.github.libretube.enums.PlayerCommand
 import com.github.libretube.enums.PlayerEvent
 import com.github.libretube.enums.SbSkipOptions
@@ -335,6 +340,51 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
         setMediaNotificationProvider(notificationProvider!!)
 
         createPlayerAndMediaSession()
+    }
+
+    /**
+     * PrimeTube: when this service is started with Context.startForegroundService() (e.g. when
+     * entering PiP or switching to background play), the system requires Service.startForeground()
+     * to be called within 5 seconds. media3 only posts the playback notification once playback is
+     * prepared, which on slow networks takes longer than that - resulting in
+     * "RemoteServiceException: Context.startForegroundService() did not then call
+     * Service.startForeground()", a killed app process and a frozen PiP window.
+     *
+     * Immediately promote the service to foreground with a placeholder notification instead.
+     * It uses the same notification id as the media3 DefaultMediaNotificationProvider, so it is
+     * seamlessly replaced as soon as the real playback notification is posted.
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        promiseForegroundIfNeeded()
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun promiseForegroundIfNeeded() {
+        val player = exoPlayer
+        val hasPlaybackContent = player != null &&
+            (player.currentMediaItem != null || player.playbackState != Player.STATE_IDLE)
+        // media3 already manages (or is about to post) the real playback notification
+        if (hasPlaybackContent) return
+
+        runCatching {
+            val notification = NotificationCompat.Builder(this, PLAYER_CHANNEL_NAME)
+                .setSmallIcon(R.drawable.ic_launcher_lockscreen)
+                .setContentTitle(getString(R.string.app_name))
+                .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+                .setOngoing(true)
+                .setShowWhen(false)
+                .build()
+            ServiceCompat.startForeground(
+                this,
+                NotificationId.PLAYER_PLAYBACK.id,
+                notification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                } else {
+                    0
+                }
+            )
+        }
     }
 
     open fun getIntentActivity(): Class<*> = MainActivity::class.java
