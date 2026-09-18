@@ -13,6 +13,7 @@ object PreferenceKeys {
     const val LANGUAGE = "language"
     const val REGION = "region"
     const val TRENDING_CATEGORY = "trending_category"
+    const val HOME_SELECTED_CHIP = "home_selected_chip"
     const val ORIENTATION = "orientation"
     const val NAVBAR_ITEMS = "navbar_items"
     const val START_FRAGMENT = "start_fragment"

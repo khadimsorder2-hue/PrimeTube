@@ -9,263 +9,116 @@
     <com.github.libretube.ui.views.CustomSwipeToRefresh
         android:id="@+id/refresh"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="match_parent">
 
-        <ScrollView
-            android:id="@+id/scroll"
+        <!-- PrimeTube: YouTube-like home. Pinned filter chip row on top, video feed below. -->
+        <LinearLayout
+            android:id="@+id/home_content"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
             android:visibility="gone"
-            tools:visibility="visible"
-            android:scrollbars="none"
-            android:overScrollMode="never">
+            tools:visibility="visible">
 
-            <LinearLayout
+            <HorizontalScrollView
+                android:id="@+id/home_chips_scroll"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingBottom="10dp">
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:clipToPadding="false"
+                android:scrollbars="none">
 
-                <!-- PrimeTube: YouTube-like topic chips row -->
-                <HorizontalScrollView
-                    android:id="@+id/home_chips_scroll"
-                    android:layout_width="match_parent"
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/home_chips"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="2dp"
-                    android:clipToPadding="false"
-                    android:scrollbars="none">
+                    app:singleLine="true"
+                    app:singleSelection="true"
+                    app:selectionRequired="true"
+                    app:chipSpacingHorizontal="8dp">
 
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/home_chips"
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_all"
+                        style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:singleLine="true"
-                        app:chipSpacingHorizontal="8dp">
+                        android:checked="true"
+                        android:text="@string/all" />
 
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_all"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/all" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_trending"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/chip_trending" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_music"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/music" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_gaming"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/gaming" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_live"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/live" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_podcasts"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/podcasts" />
-
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_trailers"
-                            style="@style/Widget.Material3.Chip.Assist"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checkable="false"
-                            android:text="@string/trailers" />
-
-                    </com.google.android.material.chip.ChipGroup>
-
-                </HorizontalScrollView>
-
-                <LinearLayout
-                    android:id="@+id/watchingTV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="?selectableItemBackground"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
-
-                    <TextView
-                        style="@style/HomeCategoryTitle"
-                        android:text="@string/continue_watching"
-                        app:drawableEndCompat="@drawable/ic_arrow_right" />
-
-                </LinearLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/watchingRV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:orientation="horizontal"
-                    android:visibility="gone"
-                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-
-                <LinearLayout
-                    android:id="@+id/featuredTV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="?selectableItemBackground"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
-
-                    <TextView
-                        style="@style/HomeCategoryTitle"
-                        android:text="@string/featured"
-                        app:drawableEndCompat="@drawable/ic_arrow_right" />
-
-                </LinearLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/featuredRV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:orientation="horizontal"
-                    android:visibility="gone"
-                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                    tools:visibility="visible" />
-
-                <LinearLayout
-                    android:id="@+id/trendingTV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="?selectableItemBackground"
-                    android:paddingEnd="12dp"
-                    android:visibility="gone"
-                    tools:visibility="visible">
-
-                    <TextView
-                        style="@style/HomeCategoryTitle"
-                        android:background="@null"
-                        android:text="@string/trending"
-                        app:drawableEndCompat="@drawable/ic_arrow_right" />
-
-                    <View
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/trending_category"
-                        style="?materialIconButtonOutlinedStyle"
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_music"
+                        style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        app:icon="@drawable/ic_frame"
-                        android:tooltipText="@string/category"/>
+                        android:text="@string/music" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/trending_region"
-                        style="?materialIconButtonFilledTonalStyle"
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_gaming"
+                        style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:layout_marginStart="5dp"
-                        app:icon="@drawable/ic_region"
-                        android:tooltipText="@string/region"/>
+                        android:text="@string/gaming" />
 
-                </LinearLayout>
-
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:descendantFocusability="blocksDescendants">
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/trendingRV"
-                        android:layout_width="match_parent"
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_live"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:nestedScrollingEnabled="false"
-                        android:visibility="gone"
-                        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-                        app:spanCount="2" />
+                        android:text="@string/live" />
 
-                </RelativeLayout>
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_podcasts"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/podcasts" />
 
-                <LinearLayout
-                    android:id="@+id/bookmarksTV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginVertical="8dp"
-                    android:background="?selectableItemBackground"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_trailers"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/trailers" />
 
-                    <TextView
-                        style="@style/HomeCategoryTitle"
-                        android:text="@string/bookmarks"
-                        app:drawableEndCompat="@drawable/ic_arrow_right" />
+                </com.google.android.material.chip.ChipGroup>
 
-                </LinearLayout>
+            </HorizontalScrollView>
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/bookmarksRV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:visibility="gone"
-                    app:layoutManager="com.google.android.material.carousel.CarouselLayoutManager" />
+            <LinearLayout
+                android:id="@+id/watchingTV"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?selectableItemBackground"
+                android:orientation="horizontal"
+                android:visibility="gone">
 
-                <LinearLayout
-                    android:id="@+id/playlistsTV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginVertical="8dp"
-                    android:background="?selectableItemBackground"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
-
-                    <TextView
-                        style="@style/HomeCategoryTitle"
-                        android:text="@string/playlists"
-                        app:drawableEndCompat="@drawable/ic_arrow_right" />
-
-                </LinearLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/playlistsRV"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:nestedScrollingEnabled="false"
-                    android:visibility="gone"
-                    app:layoutManager="com.google.android.material.carousel.CarouselLayoutManager" />
+                <TextView
+                    style="@style/HomeCategoryTitle"
+                    android:text="@string/continue_watching"
+                    app:drawableEndCompat="@drawable/ic_arrow_right" />
 
             </LinearLayout>
 
-        </ScrollView>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/watchingRV"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:visibility="gone"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/trendingRV"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="16dp"
+                android:visibility="gone"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:visibility="visible" />
+
+        </LinearLayout>
 
     </com.github.libretube.ui.views.CustomSwipeToRefresh>
 

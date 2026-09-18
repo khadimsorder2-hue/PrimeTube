@@ -3,39 +3,36 @@ package com.github.libretube.ui.fragments
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.core.os.bundleOf
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.github.libretube.R
-import com.github.libretube.api.MediaServiceRepository
 import com.github.libretube.api.TrendingCategory
-import com.github.libretube.api.obj.Playlists
 import com.github.libretube.api.obj.StreamItem
-import com.github.libretube.constants.IntentData
 import com.github.libretube.constants.PreferenceKeys
-import com.github.libretube.constants.PreferenceKeys.HOME_TAB_CONTENT
 import com.github.libretube.databinding.FragmentHomeBinding
-import com.github.libretube.db.obj.PlaylistBookmark
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.ui.activities.SettingsActivity
-import com.github.libretube.ui.adapters.CarouselPlaylist
-import com.github.libretube.ui.adapters.CarouselPlaylistAdapter
 import com.github.libretube.ui.adapters.VideoCardsAdapter
 import com.github.libretube.ui.models.HomeViewModel
 import com.github.libretube.ui.models.SubscriptionsViewModel
 import com.github.libretube.ui.models.TrendsViewModel
-import com.google.android.material.carousel.CarouselLayoutManager
-import com.google.android.material.carousel.CarouselSnapHelper
-import com.google.android.material.carousel.UncontainedCarouselStrategy
-import com.google.android.material.chip.Chip
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 
-
+/**
+ * PrimeTube: YouTube-like home.
+ *
+ * A pinned filter chip row (All / Music / Gaming / Live / Podcasts / Trailers) switches the
+ * video feed in place - exactly like the YouTube app and youtube.com - instead of navigating
+ * to a separate trends page:
+ * - "All" shows the subscription feed (new videos of subscribed channels, like the YouTube home
+ *   feed) and falls back to trending if no channels are subscribed yet.
+ * - Category chips show the matching trending category feed.
+ * A "Continue watching" shelf is kept above the feed, like on YouTube.
+ */
 class HomeFragment : Fragment(R.layout.fragment_home) {
     private var _binding: FragmentHomeBinding? = null
     private val binding get() = _binding!!
@@ -44,113 +41,36 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private val subscriptionsViewModel: SubscriptionsViewModel by activityViewModels()
     private val trendsViewModel: TrendsViewModel by activityViewModels()
 
-    private val trendingAdapter = VideoCardsAdapter()
-    private val feedAdapter = VideoCardsAdapter(columnWidthDp = 250f)
+    private val feedAdapter = VideoCardsAdapter()
     private val watchingAdapter = VideoCardsAdapter(columnWidthDp = 250f)
-    private val bookmarkAdapter = CarouselPlaylistAdapter()
-    private val playlistAdapter = CarouselPlaylistAdapter()
+
+    private var currentCategory = MODE_ALL
+    private var feedItems: List<StreamItem>? = null
+    private var trendingItems: List<StreamItem>? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = FragmentHomeBinding.bind(view)
         super.onViewCreated(view, savedInstanceState)
 
-        binding.bookmarksRV.layoutManager = CarouselLayoutManager(UncontainedCarouselStrategy())
-        binding.playlistsRV.layoutManager = CarouselLayoutManager(UncontainedCarouselStrategy())
-
-        val bookmarksSnapHelper = CarouselSnapHelper()
-        bookmarksSnapHelper.attachToRecyclerView(binding.bookmarksRV)
-
-        val playlistsSnapHelper = CarouselSnapHelper()
-        playlistsSnapHelper.attachToRecyclerView(binding.playlistsRV)
-
-        binding.trendingRV.adapter = trendingAdapter
-        binding.featuredRV.adapter = feedAdapter
-        binding.bookmarksRV.adapter = bookmarkAdapter
-        binding.playlistsRV.adapter = playlistAdapter
-        binding.playlistsRV.adapter?.registerAdapterDataObserver(object :
-            RecyclerView.AdapterDataObserver() {
-            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
-                super.onItemRangeRemoved(positionStart, itemCount)
-                if (itemCount == 0) {
-                    binding.playlistsRV.isGone = true
-                    binding.playlistsTV.isGone = true
-                }
-            }
-        })
+        binding.watchingRV.layoutManager =
+            LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         binding.watchingRV.adapter = watchingAdapter
+        binding.trendingRV.adapter = feedAdapter
 
         with(homeViewModel) {
             trending.observe(viewLifecycleOwner, ::showTrending)
             feed.observe(viewLifecycleOwner, ::showFeed)
-            bookmarks.observe(viewLifecycleOwner, ::showBookmarks)
-            playlists.observe(viewLifecycleOwner, ::showPlaylists)
             continueWatching.observe(viewLifecycleOwner, ::showContinueWatching)
             isLoading.observe(viewLifecycleOwner, ::updateLoading)
-        }
-
-        binding.featuredTV.setOnClickListener {
-            findNavController().navigate(R.id.action_homeFragment_to_subscriptionsFragment)
         }
 
         binding.watchingTV.setOnClickListener {
             findNavController().navigate(R.id.action_homeFragment_to_watchHistoryFragment)
         }
 
-        binding.trendingTV.setOnClickListener {
-            findNavController().navigate(R.id.action_homeFragment_to_trendsFragment)
-        }
-
-        binding.playlistsTV.setOnClickListener {
-            findNavController().navigate(R.id.action_homeFragment_to_libraryFragment)
-        }
-
-        binding.bookmarksTV.setOnClickListener {
-            findNavController().navigate(R.id.action_homeFragment_to_libraryFragment)
-        }
-
         binding.refresh.setOnRefreshListener {
             binding.refresh.isRefreshing = true
             fetchHomeFeed()
-        }
-
-        setupHomeChips()
-
-        binding.trendingRegion.setOnClickListener {
-            TrendsFragment.showChangeRegionDialog(requireContext()) {
-                fetchHomeFeed()
-            }
-        }
-
-        val trendingCategories = MediaServiceRepository.instance.getTrendingCategories()
-        binding.trendingCategory.isVisible = trendingCategories.size > 1
-        binding.trendingCategory.setOnClickListener {
-            val currentTrendingCategoryPref = PreferenceHelper.getString(
-                PreferenceKeys.TRENDING_CATEGORY,
-                TrendingCategory.LIVE.name
-            ).let { categoryName -> trendingCategories.first { it.name == categoryName } }
-
-            val categories = trendingCategories.map { category ->
-                category to getString(category.titleRes)
-            }
-
-            var selected = trendingCategories.indexOf(currentTrendingCategoryPref)
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.category)
-                .setSingleChoiceItems(
-                    categories.map { it.second }.toTypedArray(),
-                    selected
-                ) { _, checked ->
-                    selected = checked
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.okay) { _, _ ->
-                    PreferenceHelper.putString(
-                        PreferenceKeys.TRENDING_CATEGORY,
-                        trendingCategories[selected].name
-                    )
-                    fetchHomeFeed()
-                }
-                .show()
         }
 
         binding.refreshButton.setOnClickListener {
@@ -160,39 +80,12 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         binding.changeInstance.setOnClickListener {
             redirectToIntentSettings()
         }
-    }
 
-    /**
-     * PrimeTube: YouTube-like topic chips. Chips navigate to the trends screen
-     * with the matching category preselected.
-     */
-    private fun setupHomeChips() {
-        val chipCategories = mapOf(
-            R.id.chip_trending to null,
-            R.id.chip_music to TrendingCategory.MUSIC,
-            R.id.chip_gaming to TrendingCategory.GAMING,
-            R.id.chip_live to TrendingCategory.LIVE,
-            R.id.chip_podcasts to TrendingCategory.PODCASTS,
-            R.id.chip_trailers to TrendingCategory.TRAILERS
-        )
+        restoreSelectedChip()
 
-        binding.chipAll.setOnClickListener {
-            binding.scroll.smoothScrollTo(0, 0)
-        }
-
-        chipCategories.forEach { (chipId, category) ->
-            val chip = binding.root.findViewById<Chip>(chipId) ?: return@forEach
-            chip.setOnClickListener {
-                val bundle = if (category != null) {
-                    bundleOf(IntentData.category to category)
-                } else {
-                    null
-                }
-                findNavController().navigate(
-                    R.id.action_homeFragment_to_trendsFragment,
-                    bundle
-                )
-            }
+        binding.homeChips.setOnCheckedStateChangeListener { _, checkedIds ->
+            val checkedId = checkedIds.firstOrNull() ?: R.id.chip_all
+            selectChip(checkedId)
         }
     }
 
@@ -215,10 +108,59 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         _binding = null
     }
 
+    /**
+     * Highlight the chip matching the persisted selection without triggering a load.
+     */
+    private fun restoreSelectedChip() {
+        val chipName = PreferenceHelper.getString(PreferenceKeys.HOME_SELECTED_CHIP, MODE_ALL)
+        val chipId = when (chipName) {
+            TrendingCategory.MUSIC.name -> R.id.chip_music
+            TrendingCategory.GAMING.name -> R.id.chip_gaming
+            TrendingCategory.LIVE.name -> R.id.chip_live
+            TrendingCategory.PODCASTS.name -> R.id.chip_podcasts
+            TrendingCategory.TRAILERS.name -> R.id.chip_trailers
+            else -> R.id.chip_all
+        }
+        currentCategory = if (chipId == R.id.chip_all) MODE_ALL else chipName
+        binding.homeChips.check(chipId)
+    }
+
+    private fun selectChip(checkedId: Int) {
+        when (checkedId) {
+            R.id.chip_all -> {
+                currentCategory = MODE_ALL
+                PreferenceHelper.putString(PreferenceKeys.HOME_SELECTED_CHIP, MODE_ALL)
+                // render the cached subscription feed immediately, refresh in background
+                feedItems = homeViewModel.feed.value
+                trendingItems = null
+                renderPrimaryList()
+                fetchHomeFeed()
+            }
+
+            else -> {
+                val category = when (checkedId) {
+                    R.id.chip_music -> TrendingCategory.MUSIC
+                    R.id.chip_gaming -> TrendingCategory.GAMING
+                    R.id.chip_live -> TrendingCategory.LIVE
+                    R.id.chip_podcasts -> TrendingCategory.PODCASTS
+                    else -> TrendingCategory.TRAILERS
+                }
+                currentCategory = category.name
+                PreferenceHelper.putString(PreferenceKeys.HOME_SELECTED_CHIP, category.name)
+                PreferenceHelper.putString(PreferenceKeys.TRENDING_CATEGORY, category.name)
+                trendingItems = trendsViewModel.trendingVideos.value?.get(category)?.streams
+                renderPrimaryList()
+                fetchHomeFeed()
+            }
+        }
+    }
+
     private fun fetchHomeFeed() {
         binding.nothingHere.isGone = true
-        val defaultItems = resources.getStringArray(R.array.homeTabItemsValues)
-        val visibleItems = PreferenceHelper.getStringSet(HOME_TAB_CONTENT, defaultItems.toSet())
+        val visibleItems = when (currentCategory) {
+            MODE_ALL -> setOf("featured", "trending", "watching")
+            else -> setOf("trending", "watching")
+        }
 
         homeViewModel.loadHomeFeed(
             context = requireContext(),
@@ -226,6 +168,12 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             visibleItems = visibleItems,
             onUnusualLoadTime = ::showChangeInstanceSnackBar
         )
+    }
+
+    private fun showFeed(streamItems: List<StreamItem>?) {
+        if (streamItems == null) return
+        feedItems = streamItems
+        renderPrimaryList()
     }
 
     private fun showTrending(trends: Pair<TrendingCategory, TrendsViewModel.TrendingStreams>?) {
@@ -240,49 +188,29 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             TrendsViewModel.TrendingStreams(region, trendingStreams.streams)
         )
 
-        makeVisible(binding.trendingRV, binding.trendingTV)
-        trendingAdapter.submitList(trendingStreams.streams.take(10))
+        trendingItems = trendingStreams.streams
+        renderPrimaryList()
     }
 
-    private fun showFeed(streamItems: List<StreamItem>?) {
-        if (streamItems == null) return
+    /**
+     * Decide which list to display: for "All" the subscription feed with a trending fallback,
+     * for category chips the matching trending feed.
+     */
+    private fun renderPrimaryList() {
+        val list = when (currentCategory) {
+            MODE_ALL -> feedItems?.takeIf { it.isNotEmpty() } ?: trendingItems
+            else -> trendingItems
+        }.orEmpty()
 
-        makeVisible(binding.featuredRV, binding.featuredTV)
-        val feedVideos = streamItems.take(20)
-
-        feedAdapter.submitList(feedVideos)
-    }
-
-    private fun showBookmarks(bookmarks: List<PlaylistBookmark>?) {
-        if (bookmarks == null) return
-
-        makeVisible(binding.bookmarksTV, binding.bookmarksRV)
-        bookmarkAdapter.submitList(bookmarks.map { bookmark ->
-            CarouselPlaylist(
-                id = bookmark.playlistId,
-                title = bookmark.playlistName,
-                thumbnail = bookmark.thumbnailUrl
-            )
-        })
-    }
-
-    private fun showPlaylists(playlists: List<Playlists>?) {
-        if (playlists == null) return
-
-        makeVisible(binding.playlistsRV, binding.playlistsTV)
-        playlistAdapter.submitList(playlists.map { playlist ->
-            CarouselPlaylist(
-                id = playlist.id!!,
-                thumbnail = playlist.thumbnail,
-                title = playlist.name
-            )
-        })
+        binding.trendingRV.isGone = list.isEmpty()
+        feedAdapter.submitList(list)
     }
 
     private fun showContinueWatching(unwatchedVideos: List<StreamItem>?) {
         if (unwatchedVideos == null) return
 
-        makeVisible(binding.watchingRV, binding.watchingTV)
+        binding.watchingTV.isVisible = true
+        binding.watchingRV.isVisible = true
         watchingAdapter.submitList(unwatchedVideos)
     }
 
@@ -297,7 +225,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private fun showLoading() {
         binding.progress.isVisible = !binding.refresh.isRefreshing
         binding.nothingHere.isVisible = false
-        binding.scroll.alpha = 0.3f
+        binding.homeContent.alpha = 0.3f
     }
 
     private fun hideLoading() {
@@ -310,17 +238,17 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         } else {
             showNothingHere()
         }
-        binding.scroll.alpha = 1.0f
+        binding.homeContent.alpha = 1.0f
     }
 
     private fun showNothingHere() {
         binding.nothingHere.isVisible = true
-        binding.scroll.isVisible = false
+        binding.homeContent.isVisible = false
     }
 
     private fun showContent() {
         binding.nothingHere.isVisible = false
-        binding.scroll.isVisible = true
+        binding.homeContent.isVisible = true
     }
 
     private fun showChangeInstanceSnackBar() {
@@ -342,7 +270,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         startActivity(settingsIntent)
     }
 
-    private fun makeVisible(vararg views: View) {
-        views.forEach { it.isVisible = true }
+    companion object {
+        private const val MODE_ALL = "all"
     }
 }
