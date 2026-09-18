@@ -105,6 +105,21 @@ object DownloadHelper {
         }.show(fragmentManager, DownloadDialog::class.java.name)
     }
 
+    private fun showInAppDownloadPlaylistDialog(
+        fragmentManager: FragmentManager,
+        playlistId: String,
+        playlistName: String,
+        playlistType: PlaylistType
+    ) {
+        DownloadPlaylistDialog().apply {
+            arguments = bundleOf(
+                IntentData.playlistId to playlistId,
+                IntentData.playlistName to playlistName,
+                IntentData.playlistType to playlistType
+            )
+        }.show(fragmentManager, null)
+    }
+
     private fun showDownloadChoiceDialog(
         context: Context,
         url: String,
