@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -75,6 +76,21 @@ class GeneralSettings : BasePreferenceFragment() {
         val resetSettings = findPreference<Preference>(PreferenceKeys.RESET_SETTINGS)
         resetSettings?.setOnPreferenceClickListener {
             showResetDialog()
+            true
+        }
+
+        // PrimeTube: open Seal so the download folder (phone or SD card) and the
+        // Seal download history can be managed where downloads actually happen
+        val openSeal = findPreference<Preference>("open_seal")
+        openSeal?.setOnPreferenceClickListener {
+            val launchIntent = requireContext().packageManager
+                .getLaunchIntentForPackage(PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER)
+            if (launchIntent != null) {
+                startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } else {
+                Toast.makeText(requireContext(), R.string.seal_not_installed, Toast.LENGTH_SHORT)
+                    .show()
+            }
             true
         }
     }

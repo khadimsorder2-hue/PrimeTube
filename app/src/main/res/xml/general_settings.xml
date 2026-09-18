@@ -48,12 +48,20 @@
 
     <PreferenceCategory app:title="@string/downloads">
 
-        <EditTextPreference
+        <ListPreference
             android:icon="@drawable/ic_open"
             android:key="external_download_provider"
             android:defaultValue="com.junkfood.seal"
-            android:summary="@string/external_download_provider_summary"
-            android:title="@string/external_download_provider" />
+            android:entries="@array/download_handoff_entries"
+            android:entryValues="@array/download_handoff_values"
+            android:summary="@string/download_handoff_summary"
+            android:title="@string/download_handoff" />
+
+        <Preference
+            android:icon="@drawable/ic_open"
+            android:key="open_seal"
+            android:summary="@string/open_seal_summary"
+            android:title="@string/open_seal" />
 
     </PreferenceCategory>
 

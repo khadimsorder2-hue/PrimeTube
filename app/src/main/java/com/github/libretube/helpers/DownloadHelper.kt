@@ -22,6 +22,7 @@ import com.github.libretube.services.DownloadService
 import com.github.libretube.ui.dialogs.DownloadDialog
 import com.github.libretube.ui.dialogs.DownloadPlaylistDialog
 import com.github.libretube.ui.dialogs.ShareDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,6 +42,10 @@ object DownloadHelper {
     const val DEFAULT_TIMEOUT = 15 * 1000
     const val MAX_CONCURRENT_DOWNLOADS = 6
     private const val VIDEO_MIMETYPE = "video/*"
+
+    // PrimeTube: special values of the download handoff preference
+    const val PROVIDER_ASK = "ask"
+    const val PROVIDER_INTERNAL = "internal"
 
     fun getDownloadDir(context: Context, path: String): Path {
         val storageDir =
@@ -63,20 +68,63 @@ object DownloadHelper {
         return Int.MAX_VALUE - id
     }
 
+    /**
+     * PrimeTube: route the download tap according to the "Download handoff" preference:
+     * - Seal (default): hand the video URL to Seal directly (one tap)
+     * - Ask every time: let the user pick between Seal and the in-app downloader
+     * - Internal: open the built-in download dialog (downloads are listed on the
+     *   Downloads page in the bottom navigation)
+     */
     fun startDownloadDialog(context: Context, fragmentManager: FragmentManager, videoId: String) {
-        val externalProviderPackageName =
+        val provider =
             PreferenceHelper.getString(PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER, "")
 
-        if (externalProviderPackageName.isBlank()) {
-            DownloadDialog().apply {
-                arguments = bundleOf(IntentData.videoId to videoId)
-            }.show(fragmentManager, DownloadDialog::class.java.name)
-        } else {
-            openInExternalDownloader(
-                context,
-                "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
-            )
+        when {
+            provider.isBlank() || provider == PROVIDER_INTERNAL ->
+                showInAppDownloadDialog(fragmentManager, videoId)
+
+            provider == PROVIDER_ASK ->
+                showDownloadChoiceDialog(
+                    context,
+                    "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
+                ) {
+                    showInAppDownloadDialog(fragmentManager, videoId)
+                }
+
+            else ->
+                openInExternalDownloader(
+                    context,
+                    "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
+                )
         }
+    }
+
+    private fun showInAppDownloadDialog(fragmentManager: FragmentManager, videoId: String) {
+        DownloadDialog().apply {
+            arguments = bundleOf(IntentData.videoId to videoId)
+        }.show(fragmentManager, DownloadDialog::class.java.name)
+    }
+
+    private fun showDownloadChoiceDialog(
+        context: Context,
+        url: String,
+        onInAppDownload: () -> Unit
+    ) {
+        val options = arrayOf(
+            context.getString(R.string.download_with_seal),
+            context.getString(R.string.download_in_app)
+        )
+        MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.download_handoff)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> openInExternalDownloader(context, url)
+
+                    else -> onInAppDownload()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     /**
@@ -91,7 +139,8 @@ object DownloadHelper {
         val provider = PreferenceHelper.getString(
             PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER,
             ""
-        ).ifBlank { PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER }
+        ).takeIf { it.isNotBlank() && it != PROVIDER_ASK && it != PROVIDER_INTERNAL }
+            ?: PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER
         val packageManager = context.packageManager
 
         val viewIntent = Intent(Intent.ACTION_VIEW)
@@ -127,37 +176,47 @@ object DownloadHelper {
         playlistName: String,
         playlistType: PlaylistType
     ) {
-        val externalProviderPackageName =
+        val provider =
             PreferenceHelper.getString(PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER, "")
+        val playlistUrl = "${ShareDialog.YOUTUBE_FRONTEND_URL}/playlist?list=$playlistId"
 
-        if (externalProviderPackageName.isBlank()) {
-            val downloadPlaylistDialog = DownloadPlaylistDialog().apply {
-                arguments = bundleOf(
-                    IntentData.playlistId to playlistId,
-                    IntentData.playlistName to playlistName,
-                    IntentData.playlistType to playlistType
+        when {
+            provider.isBlank() || provider == PROVIDER_INTERNAL ->
+                showInAppDownloadPlaylistDialog(
+                    fragmentManager,
+                    playlistId,
+                    playlistName,
+                    playlistType
                 )
-            }
-            downloadPlaylistDialog.show(fragmentManager, null)
-        } else if (playlistType == PlaylistType.PUBLIC) {
-            openInExternalDownloader(
-                context,
-                "${ShareDialog.YOUTUBE_FRONTEND_URL}/playlist?list=$playlistId"
-            )
-        } else {
-            CoroutineScope(Dispatchers.IO).launch {
-                val playlistVideoIds = try {
-                    PlaylistsHelper.getPlaylist(playlistId)
-                } catch (e: Exception) {
-                    context.toastFromMainDispatcher(R.string.unknown_error)
-                    return@launch
-                }.relatedStreams.mapNotNull { it.url?.toID() }.joinToString(",")
 
-                withContext(Dispatchers.Main) {
-                    openInExternalDownloader(
-                        context,
-                        "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch_videos?video_ids=${playlistVideoIds}"
+            provider == PROVIDER_ASK ->
+                showDownloadChoiceDialog(context, playlistUrl) {
+                    showInAppDownloadPlaylistDialog(
+                        fragmentManager,
+                        playlistId,
+                        playlistName,
+                        playlistType
                     )
+                }
+
+            playlistType == PlaylistType.PUBLIC ->
+                openInExternalDownloader(context, playlistUrl)
+
+            else -> {
+                CoroutineScope(Dispatchers.IO).launch {
+                    val playlistVideoIds = try {
+                        PlaylistsHelper.getPlaylist(playlistId)
+                    } catch (e: Exception) {
+                        context.toastFromMainDispatcher(R.string.unknown_error)
+                        return@launch
+                    }.relatedStreams.mapNotNull { it.url?.toID() }.joinToString(",")
+
+                    withContext(Dispatchers.Main) {
+                        openInExternalDownloader(
+                            context,
+                            "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch_videos?video_ids=${playlistVideoIds}"
+                        )
+                    }
                 }
             }
         }

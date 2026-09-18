@@ -527,6 +527,16 @@
     <string name="gestures">Gestures</string>
     <string name="external_download_provider">External download provider</string>
     <string name="external_download_provider_summary">Package name of the app that opens when you tap Download. Default: Seal (com.junkfood.seal). Leave blank to use PrimeTube\'s inbuilt downloader.</string>
+    <string name="download_handoff">Download handoff</string>
+    <string name="download_handoff_summary">What happens when you tap Download.</string>
+    <string name="download_handoff_seal">Seal (one-tap)</string>
+    <string name="download_handoff_ask">Ask every time</string>
+    <string name="download_handoff_internal">PrimeTube in-app downloader</string>
+    <string name="download_with_seal">Save with Seal</string>
+    <string name="download_in_app">Save in app</string>
+    <string name="open_seal">Open Seal (download location &amp; history)</string>
+    <string name="open_seal_summary">Choose the download folder (phone or SD card) under Seal: Settings → Download location. Your Seal download history is in Seal\'s Downloads screen.</string>
+    <string name="seal_not_installed">Seal is not installed</string>
     <string name="local_stream_extraction">Local stream extraction</string>
     <string name="local_stream_extraction_summary">Directly fetch video playback information from YouTube without using Piped.</string>
     <string name="local_ryd">Local Return Youtube Dislike extractor</string>
