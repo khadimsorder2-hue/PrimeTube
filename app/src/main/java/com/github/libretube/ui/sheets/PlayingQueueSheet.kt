@@ -5,8 +5,10 @@ import android.os.Bundle
 import android.view.View
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.Player
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.github.libretube.R
 import com.github.libretube.constants.IntentData
 import com.github.libretube.databinding.QueueBottomSheetBinding
@@ -17,6 +19,7 @@ import com.github.libretube.extensions.setActionListener
 import com.github.libretube.extensions.toID
 import com.github.libretube.ui.adapters.PlayingQueueAdapter
 import com.github.libretube.ui.dialogs.AddToPlaylistDialog
+import com.github.libretube.ui.views.SafeLinearLayoutManager
 import com.github.libretube.util.PlayingQueue
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +36,8 @@ class PlayingQueueSheet : ExpandedBottomSheet(R.layout.queue_bottom_sheet) {
         _binding = QueueBottomSheetBinding.bind(view)
         super.onViewCreated(view, savedInstanceState)
 
-        binding.optionsRecycler.layoutManager = LinearLayoutManager(context)
+        // PrimeTube: crash-proof layout manager (no prefetch, layout guards)
+        binding.optionsRecycler.layoutManager = SafeLinearLayoutManager(requireContext())
         val adapter = PlayingQueueAdapter { videoId ->
             setFragmentResult(PLAYING_QUEUE_REQUEST_KEY, bundleOf(IntentData.videoId to videoId))
         }
@@ -67,7 +71,7 @@ class PlayingQueueSheet : ExpandedBottomSheet(R.layout.queue_bottom_sheet) {
                         PlayingQueue.getStreams()
                             .filterIndexed { index, _ -> index == currentIndex }
                     )
-                    adapter.notifyDataSetChanged()
+                    adapter.refresh()
                 }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
@@ -88,19 +92,29 @@ class PlayingQueueSheet : ExpandedBottomSheet(R.layout.queue_bottom_sheet) {
             allowSwipe = true,
             allowDrag = true,
             onDismissedListener = { position ->
-                if (position == PlayingQueue.currentIndex()) {
-                    adapter.notifyItemChanged(position)
-                    return@setActionListener
-                }
+                // PrimeTube: refresh the whole snapshot - granular notifies on a
+                // list that the player service mutates in background caused
+                // IndexOutOfBoundsException crashes
                 PlayingQueue.remove(position)
-                adapter.notifyItemRemoved(position)
-                adapter.notifyItemRangeChanged(position, adapter.itemCount)
+                adapter.refresh()
             },
             onDragListener = { from, to ->
                 PlayingQueue.move(from, to)
-                adapter.notifyItemMoved(from, to)
+                adapter.refresh()
             }
         )
+
+        // PrimeTube: keep the queue sheet in sync while it is open - the player
+        // service can mutate the queue in the background at any time (append next
+        // video, source errors, ...). refresh() only notifies on real changes.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    kotlinx.coroutines.delay(1500)
+                    adapter.refresh()
+                }
+            }
+        }
     }
 
     private fun updateRepeatButton() {
@@ -145,7 +159,7 @@ class PlayingQueueSheet : ExpandedBottomSheet(R.layout.queue_bottom_sheet) {
                     else -> throw IllegalArgumentException()
                 }
                 PlayingQueue.setStreams(newQueue)
-                _binding?.optionsRecycler?.adapter?.notifyDataSetChanged()
+                (_binding?.optionsRecycler?.adapter as? PlayingQueueAdapter)?.refresh()
             }
             .show()
     }
@@ -194,7 +208,7 @@ class PlayingQueueSheet : ExpandedBottomSheet(R.layout.queue_bottom_sheet) {
                             }
                             PlayingQueue.setStreams(streams)
                             withContext(Dispatchers.Main) {
-                                _binding?.optionsRecycler?.adapter?.notifyDataSetChanged()
+                                (_binding?.optionsRecycler?.adapter as? PlayingQueueAdapter)?.refresh()
                             }
                         }
                     }

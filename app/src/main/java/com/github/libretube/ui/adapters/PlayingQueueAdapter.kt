@@ -6,6 +6,7 @@ import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.github.libretube.api.obj.StreamItem
 import com.github.libretube.databinding.QueueRowBinding
 import com.github.libretube.extensions.toID
 import com.github.libretube.helpers.ImageHelper
@@ -13,9 +14,37 @@ import com.github.libretube.helpers.ThemeHelper
 import com.github.libretube.ui.viewholders.PlayingQueueViewHolder
 import com.github.libretube.util.PlayingQueue
 
+/**
+ * PrimeTube: the queue adapter no longer reads the live, mutable queue of
+ * [PlayingQueue] directly while binding. Binding against a list that the player
+ * service mutates in the background (append next video, source error, ...)
+ * leads to "Inconsistency detected. Invalid view holder adapter position"
+ * IndexOutOfBoundsException crashes. Instead we keep a private snapshot that
+ * can only change together with a notifyDataSetChanged() call.
+ */
 class PlayingQueueAdapter(
     private val onQueueItemSelected: (String) -> Unit
 ) : RecyclerView.Adapter<PlayingQueueViewHolder>() {
+
+    var items: List<StreamItem> = PlayingQueue.getStreams()
+        private set
+
+    private var lastCurrentIndex: Int = PlayingQueue.currentIndex()
+
+    /**
+     * Take a fresh snapshot of the queue and notify the RecyclerView only when
+     * something actually changed (avoids flicker and keeps the adapter
+     * internally consistent at any time).
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    fun refresh() {
+        val newItems = PlayingQueue.getStreams()
+        val newIndex = PlayingQueue.currentIndex()
+        if (newItems == items && newIndex == lastCurrentIndex) return
+        items = newItems
+        lastCurrentIndex = newIndex
+        notifyDataSetChanged()
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PlayingQueueViewHolder {
         val binding = QueueRowBinding.inflate(
@@ -26,18 +55,19 @@ class PlayingQueueAdapter(
         return PlayingQueueViewHolder(binding)
     }
 
-    override fun getItemCount() = PlayingQueue.size()
+    override fun getItemCount() = items.size
 
     @SuppressLint("SetTextI18n")
     override fun onBindViewHolder(holder: PlayingQueueViewHolder, position: Int) {
-        val streamItem = PlayingQueue.getStreams()[position]
+        // PrimeTube: bounds guard - never bind against a stale position
+        val streamItem = items.getOrNull(position) ?: return
         holder.binding.apply {
             ImageHelper.loadImage(streamItem.thumbnail, thumbnail)
             title.text = streamItem.title
             videoInfo.text = streamItem.uploaderName + "  •  " +
                 DateUtils.formatElapsedTime(streamItem.duration ?: 0)
 
-            val currentIndex = PlayingQueue.currentIndex()
+            val currentIndex = lastCurrentIndex
             root.setBackgroundColor(
                 if (currentIndex == position) {
                     ThemeHelper.getThemeColor(root.context, android.R.attr.colorControlHighlight)
@@ -58,8 +88,7 @@ class PlayingQueueAdapter(
 
                 // select the new item in the queue and update the selected item in the UI
                 onQueueItemSelected(newVideoId)
-                notifyItemChanged(oldPosition)
-                notifyItemChanged(newPosition)
+                refresh()
             }
         }
     }
