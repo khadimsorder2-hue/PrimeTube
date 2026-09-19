@@ -618,6 +618,18 @@
     <string name="prime_live_tv_failed">Couldn\'t load the TV playlist. Check your connection.</string>
     <string name="prime_live_player_error">Playback error - this channel may be offline.</string>
     <string name="prime_queue_title">Queue</string>
+    <!-- PrimeTube: Live TV player (YouTube-like) -->
+    <string name="prime_live_badge">LIVE</string>
+    <string name="prime_live_no_internet">No internet connection</string>
+    <string name="prime_live_retrying">Retrying… (%1$d/2)</string>
+    <string name="prime_live_retry_next">Channel is not responding — switching to the next one</string>
+    <string name="prime_live_channels">Channels</string>
+    <string name="prime_live_prev_channel">Previous channel</string>
+    <string name="prime_live_next_channel">Next channel</string>
+    <string name="prime_live_fill">Full screen (fill)</string>
+    <string name="prime_live_fit">Fit screen</string>
+    <string name="prime_live_auto">Auto</string>
+    <string name="prime_live_no_quality">No quality options for this channel</string>
     <string name="tooltip_filter">Filter</string>
     <string name="tooltip_edit_groups">Edit groups</string>
     <string name="tooltip_create_playlist">Create playlist</string>
