@@ -55,9 +55,23 @@ object NavigationHelper {
         forceVideo: Boolean = false,
         audioOnlyPlayerRequested: Boolean = false,
     ) {
+        // PrimeTube: crash guards - without an activity host or a video id there is
+        // nothing to attach to or to open, and the unwraps below would throw
+        val activity = ContextHelper.tryUnwrapActivity<AbstractPlayerHostActivity>(context)
+            ?: run {
+                if (playerData.videoId.isNullOrBlank()) return
+                if (audioOnlyPlayerRequested || (PreferenceHelper.getBoolean(PreferenceKeys.AUDIO_ONLY_MODE, false) && !forceVideo)) {
+                    BackgroundHelper.playOnBackground(context, playerData)
+                    openAudioPlayerFragment(context, offlinePlayer = playerData.isOffline, minimizeByDefault = true)
+                } else {
+                    openVideoPlayerFragment(context, playerData, alreadyStarted)
+                }
+                return
+            }
+        if (playerData.videoId == null && !playerData.isOffline) return
+
         // attempt to attach to the current media session first by using the corresponding
         // video/audio player instance
-        val activity = ContextHelper.unwrapActivity<AbstractPlayerHostActivity>(context)
         val attachedToRunningPlayer = activity.runOnPlayerFragment {
             // can only continue using player if in same mode (online/offline)
             // otherwise, recreate the player
@@ -122,7 +136,8 @@ object NavigationHelper {
     fun navigatePlaylist(context: Context, playlistUrlOrId: String?, playlistType: PlaylistType) {
         if (playlistUrlOrId == null) return
 
-        val activity = ContextHelper.unwrapActivity<MainActivity>(context)
+        // PrimeTube: safe unwrap - cannot navigate without the main activity
+        val activity = ContextHelper.tryUnwrapActivity<MainActivity>(context) ?: return
         activity.navController.navigate(
             NavDirections.openPlaylist(playlistUrlOrId.toID(), playlistType)
         )
@@ -136,7 +151,8 @@ object NavigationHelper {
         offlinePlayer: Boolean = false,
         minimizeByDefault: Boolean = false
     ) {
-        val activity = ContextHelper.unwrapActivity<BaseActivity>(context)
+        // PrimeTube: safe unwrap - a missing host activity must not crash
+        val activity = ContextHelper.tryUnwrapActivity<BaseActivity>(context) ?: return
         activity.supportFragmentManager.commitNow {
             val args = bundleOf(
                 IntentData.minimizeByDefault to minimizeByDefault,
@@ -154,7 +170,8 @@ object NavigationHelper {
         playerData: PlayerData,
         alreadyStarted: Boolean = false,
     ) {
-        val activity = ContextHelper.unwrapActivity<BaseActivity>(context)
+        // PrimeTube: safe unwrap - a missing host activity must not crash
+        val activity = ContextHelper.tryUnwrapActivity<BaseActivity>(context) ?: return
 
         val bundle = bundleOf(
             IntentData.playerData to playerData,

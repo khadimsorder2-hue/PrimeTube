@@ -10,6 +10,7 @@ import com.github.libretube.constants.IntentData
 import com.github.libretube.databinding.VideoRowBinding
 import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.db.obj.WatchHistoryItem
+import com.github.libretube.helpers.ContextHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.parcelable.PlayerData
@@ -35,7 +36,9 @@ class WatchHistoryAdapter :
     }
 
     override fun onBindViewHolder(holder: WatchHistoryViewHolder, position: Int) {
-        val video = getItem(holder.bindingAdapterPosition)
+        // PrimeTube: guard against NO_POSITION - bindingAdapterPosition can be -1 while
+        // DiffUtil animations are pending, which crashed getItem(-1) with IndexOutOfBounds
+        val video = currentList.getOrNull(holder.bindingAdapterPosition) ?: return
         holder.binding.apply {
             videoTitle.text = video.title
             channelName.text = video.uploader
@@ -57,36 +60,52 @@ class WatchHistoryAdapter :
             }
 
             channelImage.setOnClickListener {
-                NavigationHelper.navigateChannel(root.context, video.uploaderUrl)
+                // PrimeTube: uploaderUrl may be empty in old history entries
+                if (!video.uploaderUrl.isNullOrBlank()) {
+                    NavigationHelper.navigateChannel(root.context, video.uploaderUrl)
+                }
             }
 
             root.setOnClickListener {
-                NavigationHelper.navigateVideo(root.context, PlayerData(video.videoId))
-            }
-
-            val activity = (root.context as BaseActivity)
-            val fragmentManager = activity.supportFragmentManager
-            root.setOnLongClickListener {
-                fragmentManager.setFragmentResultListener(
-                    VideoOptionsBottomSheet.VIDEO_OPTIONS_SHEET_REQUEST_KEY,
-                    activity
-                ) { _, _ ->
-                    notifyItemChanged(position)
+                // PrimeTube: never navigate with an empty video id (crash guard)
+                if (!video.videoId.isNullOrBlank()) {
+                    NavigationHelper.navigateVideo(root.context, PlayerData(video.videoId))
                 }
-                val sheet = VideoOptionsBottomSheet()
-                sheet.arguments = bundleOf(IntentData.streamItem to video.toStreamItem())
-                sheet.show(fragmentManager, WatchHistoryAdapter::class.java.name)
-                true
             }
 
-            if (video.duration != null) watchProgress.setWatchProgressLength(
+            // PrimeTube: the context is not always the raw activity - use a safe unwrap
+            // instead of a hard cast that could throw ClassCastException
+            val activity = ContextHelper.tryUnwrapActivity<BaseActivity>(root.context)
+            if (activity != null) {
+                val fragmentManager = activity.supportFragmentManager
+                root.setOnLongClickListener {
+                    fragmentManager.setFragmentResultListener(
+                        VideoOptionsBottomSheet.VIDEO_OPTIONS_SHEET_REQUEST_KEY,
+                        activity
+                    ) { _, _ ->
+                        notifyItemChanged(position)
+                    }
+                    val sheet = VideoOptionsBottomSheet()
+                    sheet.arguments = bundleOf(IntentData.streamItem to video.toStreamItem())
+                    sheet.show(fragmentManager, WatchHistoryAdapter::class.java.name)
+                    true
+                }
+            } else {
+                root.setOnLongClickListener(null)
+            }
+
+            // PrimeTube: live items have no meaningful duration - avoid dividing by 0
+            val duration = video.duration
+            if (duration != null && duration > 0) watchProgress.setWatchProgressLength(
                 video.videoId,
-                video.duration
+                duration
             )
 
             CoroutineScope(Dispatchers.IO).launch {
-                val isDownloaded =
+                // PrimeTube: a closed/migrating database must never crash the list
+                val isDownloaded = runCatching {
                     DatabaseHolder.Database.downloadDao().exists(video.videoId)
+                }.getOrDefault(false)
 
                 withContext(Dispatchers.Main) {
                     downloadBadge.isVisible = isDownloaded

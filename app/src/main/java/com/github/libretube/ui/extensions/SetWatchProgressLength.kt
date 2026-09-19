@@ -18,34 +18,43 @@ import com.github.libretube.helpers.ThemeHelper
  * @param duration The duration of the video in seconds
  */
 fun View.setWatchProgressLength(videoId: String, duration: Long) {
-    val progress = DatabaseHelper.getWatchPositionBlocking(videoId)?.div(1000)
-    if (progress == null || progress == 0L) {
+    // PrimeTube: a zero/short duration would produce an infinite percent width - hide instead
+    if (duration <= 0L) {
         isGone = true
         return
     }
-
-    updateLayoutParams<ConstraintLayout.LayoutParams> {
-        matchConstraintPercentWidth = progress.toFloat()/ duration.toFloat()
-    }
-
-    var backgroundColor = ThemeHelper.getThemeColor(
-        context,
-        com.google.android.material.R.attr.colorPrimaryVariant
-    )
-    // increase the brightness for better contrast in light mode
-    if (!ThemeHelper.isDarkMode(context)) {
-        backgroundColor = ColorUtils.blendARGB(backgroundColor, Color.WHITE, 0.4f)
-    }
-    setBackgroundColor(backgroundColor)
-
-    // set corner-radius
-    clipToOutline = true
-    outlineProvider = object : ViewOutlineProvider() {
-        override fun getOutline(view: View, outline: Outline) {
-            outline.setRoundRect(0, 0, view.width, view.height, 16f)
+    // PrimeTube: database errors during binding must never crash the list
+    runCatching {
+        val progress = DatabaseHelper.getWatchPositionBlocking(videoId)?.div(1000)
+        if (progress == null || progress == 0L) {
+            isGone = true
+            return
         }
+
+        updateLayoutParams<ConstraintLayout.LayoutParams> {
+            matchConstraintPercentWidth = progress.toFloat().coerceIn(0f, 1f) / duration.toFloat()
+        }
+
+        var backgroundColor = ThemeHelper.getThemeColor(
+            context,
+            com.google.android.material.R.attr.colorPrimaryVariant
+        )
+        // increase the brightness for better contrast in light mode
+        if (!ThemeHelper.isDarkMode(context)) {
+            backgroundColor = ColorUtils.blendARGB(backgroundColor, Color.WHITE, 0.4f)
+        }
+        setBackgroundColor(backgroundColor)
+
+        // set corner-radius
+        clipToOutline = true
+        outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, 16f)
+            }
+        }
+
+        isVisible = true
+    }.onFailure {
+        isGone = true
     }
-
-
-    isVisible = true
 }

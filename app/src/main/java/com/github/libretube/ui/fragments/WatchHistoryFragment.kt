@@ -174,7 +174,8 @@ class WatchHistoryFragment : DynamicLayoutManagerFragment(R.layout.fragment_watc
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // manually restore the recyclerview state due to https://github.com/material-components/material-components-android/issues/3473
-        binding.watchHistoryRecView.layoutManager?.onRestoreInstanceState(recyclerViewState)
+        // PrimeTube: _binding can already be null here - guard against the NPE
+        _binding?.watchHistoryRecView?.layoutManager?.onRestoreInstanceState(recyclerViewState)
     }
 
     override fun onDestroyView() {

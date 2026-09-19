@@ -1066,10 +1066,15 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
      * video, i.e. either both are online or both are offline.
      */
     fun playNextVideo(nextId: String) {
-        playerController.sendCustomCommand(
-            AbstractPlayerService.runPlayerActionCommand,
-            bundleOf(PlayerCommand.PLAY_VIDEO_BY_ID.name to nextId)
-        )
+        // PrimeTube: the MediaController may not be connected yet - sending a command
+        // to an uninitialized controller would throw and kill the navigation
+        if (!::playerController.isInitialized) return
+        runCatching {
+            playerController.sendCustomCommand(
+                AbstractPlayerService.runPlayerActionCommand,
+                bundleOf(PlayerCommand.PLAY_VIDEO_BY_ID.name to nextId)
+            )
+        }
     }
 
     private fun dismissCommentsSheet() {
