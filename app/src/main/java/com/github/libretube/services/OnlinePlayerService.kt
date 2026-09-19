@@ -40,6 +40,10 @@ import com.github.libretube.player.manifest.SabrManifest
 import com.github.libretube.util.DeArrowUtil
 import com.github.libretube.util.PlayingQueue
 import com.github.libretube.util.YoutubeHlsPlaylistParser
+import android.util.Base64
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,6 +67,14 @@ open class OnlinePlayerService : AbstractPlayerService() {
      * The response that gets when called the Api.
      */
     private var streams: Streams? = null
+
+    /**
+     * PrimeTube: YouTube's official DASH manifest (with all URLs routed through the instance
+     * proxy), fetched as a fallback when the instance caps the available streams below 1440p.
+     * This makes 1440p/2160p (4K) playback possible even on instances that only report
+     * streams up to 1080p. Null when not needed or when fetching failed.
+     */
+    private var officialDashManifest: String? = null
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -147,6 +159,10 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 }
             } ?: return@launch
 
+            // PrimeTube: if the instance only offers streams below 1440p, fetch YouTube's
+            // official DASH manifest as a higher-quality (1440p/2160p) fallback source.
+            officialDashManifest = fetchOfficialDashManifestIfNeeded(streams)
+
             streams?.toStreamItem(videoId)?.let {
                 // save the current stream to the queue
                 PlayingQueue.updateCurrent(it)
@@ -222,8 +238,53 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
     override fun navigateVideo(videoId: String) {
         this.streams = null
+        this.officialDashManifest = null
 
         super.navigateVideo(videoId)
+    }
+
+    /**
+     * PrimeTube: fetches YouTube's official DASH manifest when the instance-provided streams
+     * don't include any video quality above 1080p. All googlevideo URLs inside the manifest
+     * get rewritten through the instance proxy so that they can be fetched by this device.
+     * Returns null on any failure, in which case the regular locally-built manifest is used.
+     */
+    private suspend fun fetchOfficialDashManifestIfNeeded(streams: Streams): String? {
+        if (streams.isLive || streams.dash == null || !ProxyHelper.hasProxyUrl()) return null
+
+        val maxVideoOnlyHeight = streams.videoStreams
+            .filter { it.videoOnly == true }
+            .maxOfOrNull { it.height ?: 0 } ?: 0
+        if (maxVideoOnlyHeight >= 1440) return null
+
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val manifestUrl = ProxyHelper.rewriteUrlUsingProxyPreference(streams.dash!!)
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .build()
+                val request = Request.Builder().url(manifestUrl).build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    val manifest = ProxyHelper.rewriteManifestUrls(
+                        response.body?.string().orEmpty()
+                    )
+                    // only use the official manifest if it contains usable video representations
+                    manifest.takeIf { it.contains("<Representation") }
+                }
+            }.onFailure {
+                Log.w(TAG(), "failed to fetch official dash manifest: $it")
+            }.getOrNull()
+        }
+    }
+
+    /**
+     * PrimeTube: encodes a DASH manifest string into a data URI usable by ExoPlayer.
+     */
+    private fun String.toDashDataUri(): Uri {
+        val encoded = Base64.encodeToString(toByteArray(), Base64.DEFAULT)
+        return "data:application/dash+xml;charset=utf-8;base64,$encoded".toUri()
     }
 
     /**
@@ -289,19 +350,45 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 exoPlayer?.setMediaSource(MergingMediaSource(*mediaSources.toTypedArray()))
                 return
             }
-            // DASH
+            // PrimeTube LIVE FIX: livestreams are played via HLS first, which is far more
+            // reliable for live streams than DASH. The DASH manifest is only used as a
+            // fallback when no HLS URL is available. Previously live streams always used
+            // DASH, which frequently failed (403/blocked manifest URLs).
+            streams.isLive && streams.hls != null -> {
+                val hlsMediaSourceFactory = HlsMediaSource.Factory(DefaultDataSource.Factory(this))
+                    .setPlaylistParserFactory(YoutubeHlsPlaylistParser.Factory())
+
+                val mediaItem = createMediaItem(
+                    ProxyHelper.rewriteUrlUsingProxyPreference(streams.hls).toUri(),
+                    MimeTypes.APPLICATION_M3U8,
+                    streams
+                )
+                val mediaSource = hlsMediaSourceFactory.createMediaSource(mediaItem)
+
+                exoPlayer?.setMediaSource(mediaSource)
+                return
+            }
+            // live stream without HLS: use the DASH manifest generated by YT
+            streams.isLive && streams.dash != null -> {
+                val dashUri = ProxyHelper.rewriteUrlUsingProxyPreference(
+                    streams.dash
+                ).toUri()
+                val mediaItem = createMediaItem(dashUri, MimeTypes.APPLICATION_MPD, streams)
+                exoPlayer?.setMediaItem(mediaItem)
+            }
+            // DASH (regular videos)
             streams.videoStreams.any { it.url?.startsWith("sabr://") != true } -> {
-                // only use the dash manifest generated by YT if either it's a livestream or no other source is available
-                val dashUri =
-                    if (streams.isLive && streams.dash != null) {
-                        ProxyHelper.rewriteUrlUsingProxyPreference(
-                            streams.dash
-                        ).toUri()
-                    } else {
-                        PlayerHelper.createDashSource(streams.copy(videoStreams = streams.videoStreams.filter {
-                            it.url?.startsWith("sabr://") != true
-                        }), this)
-                    }
+                // PrimeTube 4K BOOST: if the instance caps the streams below 1440p, use the
+                // official YT DASH manifest (with proxied URLs) so that 1440p/2160p can play.
+                val dashUri = officialDashManifest?.toDashDataUri()
+                    ?: PlayerHelper.createDashSource(
+                        streams.copy(
+                            videoStreams = streams.videoStreams.filter {
+                                it.url?.startsWith("sabr://") != true
+                            }
+                        ),
+                        this
+                    )
 
                 val mediaItem = createMediaItem(dashUri, MimeTypes.APPLICATION_MPD, streams)
                 exoPlayer?.setMediaItem(mediaItem)

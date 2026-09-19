@@ -28,6 +28,28 @@ object ProxyHelper {
     }
 
     /**
+     * PrimeTube: whether a proxy URL of the currently selected instance is known.
+     */
+    fun hasProxyUrl(): Boolean =
+        PreferenceHelper.getString(PreferenceKeys.IMAGE_PROXY_URL, "").isNotBlank()
+
+    /**
+     * PrimeTube: rewrite every googlevideo URL contained inside a fetched manifest (DASH/HLS)
+     * to use the proxy of the currently selected instance, so that playback also works when
+     * the URLs are bound to the IP address of the instance server.
+     * XML-escaped ampersands are handled so that escaped URLs keep working.
+     */
+    fun rewriteManifestUrls(manifest: String): String {
+        val regex = Regex("https?://[A-Za-z0-9.\\-]*googlevideo\\.com[^\\s\"'<>]*")
+        return regex.replace(manifest) { match ->
+            val rawUrl = match.value
+            val decodedUrl = rawUrl.replace("&amp;", "&")
+            val rewritten = proxyRewriteUrl(decodedUrl) ?: return@replace rawUrl
+            rewritten.replace("&", "&amp;")
+        }
+    }
+
+    /**
      * Rewrite the URL to use the stored image proxy url of the selected instance.
      * Can handle both Piped links and normal YouTube links.
      */
