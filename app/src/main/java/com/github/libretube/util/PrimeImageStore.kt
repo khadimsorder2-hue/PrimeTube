@@ -97,7 +97,7 @@ object PrimeImageStore {
     /**
      * OkHttp interceptor that saves image responses into the store while they pass by.
      *
-     * Uses [Interceptor.Chain.peekBody] so the response body itself is never consumed -
+     * Uses [Response.peekBody] so the response body itself is never consumed -
      * coil keeps receiving the untouched response.
      */
     class TeeInterceptor(context: Context) : Interceptor {
@@ -119,7 +119,7 @@ object PrimeImageStore {
                 val length = response.body?.contentLength() ?: return@runCatching
                 if (length <= 0L || length > MAX_TEE_BYTES) return@runCatching
 
-                val peeked = chain.peekBody(length)
+                val peeked = response.peekBody(length)
                 val bytes = peeked.bytes()
                 if (bytes.isNotEmpty()) store(appContext, url, bytes)
             }

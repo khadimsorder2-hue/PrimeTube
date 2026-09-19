@@ -424,38 +424,35 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
         builder.addAction(
             R.drawable.ic_prev,
-            getString(androidx.media3.ui.R.string.exo_controls_previous),
+            getString(R.string.tooltip_previous),
             buildForegroundActionPendingIntent(PlayerEvent.Prev, REQUEST_CODE_PREV)
         )
         builder.addAction(
             R.drawable.ic_rewind,
-            getString(androidx.media3.ui.R.string.exo_controls_rewind),
+            getString(R.string.rewind),
             buildForegroundActionPendingIntent(PlayerEvent.Rewind, REQUEST_CODE_REWIND)
         )
         builder.addAction(
             if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
-            getString(
-                if (isPlaying) androidx.media3.ui.R.string.exo_controls_pause
-                else androidx.media3.ui.R.string.exo_controls_play
-            ),
+            getString(if (isPlaying) R.string.pause else R.string.tooltip_play),
             buildForegroundActionPendingIntent(PlayerEvent.PlayPause, REQUEST_CODE_PLAY_PAUSE)
         )
         builder.addAction(
             R.drawable.ic_forward,
-            getString(androidx.media3.ui.R.string.exo_controls_fast_forward),
+            getString(R.string.forward),
             buildForegroundActionPendingIntent(PlayerEvent.Forward, REQUEST_CODE_FORWARD)
         )
         builder.addAction(
             R.drawable.ic_next,
-            getString(androidx.media3.ui.R.string.exo_controls_next),
+            getString(R.string.tooltip_next),
             buildForegroundActionPendingIntent(PlayerEvent.Next, REQUEST_CODE_NEXT)
         )
 
-        // media style with the session token so that the system renders it as a
+        // media style with the session so that the system renders it as a
         // proper media notification (compact actions + seekbar on Android 10+)
         mediaLibrarySession?.let { session ->
             builder.setStyle(
-                MediaStyleNotificationHelper.MediaStyle(session.token)
+                MediaStyleNotificationHelper.MediaStyle(session)
                     .setShowActionsInCompactView(0, 2, 4)
             )
         }
