@@ -203,7 +203,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
     /**
      * PrimeTube: map raw stream-fetch exceptions to messages the user can act on.
      */
-    private fun primeReadableStreamError(e: Exception): String {
+    private fun primeReadableStreamError(e: Throwable): String {
         val signature = (e.message.orEmpty() + " " + e.javaClass.simpleName).lowercase()
         return when {
             "age" in signature || "sign in" in signature || "confirm" in signature ->
