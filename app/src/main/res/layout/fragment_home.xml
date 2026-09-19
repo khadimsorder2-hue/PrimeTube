@@ -47,39 +47,18 @@
                         android:text="@string/all" />
 
                     <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_music"
+                        android:id="@+id/chip_recommended"
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/music" />
+                        android:text="@string/home_recommended" />
 
                     <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_gaming"
+                        android:id="@+id/chip_continue"
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/gaming" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_live"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/live" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_podcasts"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/podcasts" />
-
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_trailers"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/trailers" />
+                        android:text="@string/continue_watching" />
 
                 </com.google.android.material.chip.ChipGroup>
 
@@ -107,6 +86,16 @@
                 android:clipToPadding="false"
                 android:visibility="gone"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+            <!-- PrimeTube: shown when the selected chip has no videos yet -->
+            <TextView
+                android:id="@+id/home_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="32dp"
+                android:visibility="gone"
+                tools:text="@string/home_recommended_empty" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/trendingRV"

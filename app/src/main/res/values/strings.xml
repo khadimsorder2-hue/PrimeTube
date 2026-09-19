@@ -603,4 +603,8 @@
     <string name="import_temp_playlist_summary">Do you want to create a new playlist named \'%1$s\'? The playlist will contain %2$d videos.</string>
     <string name="comment_verified">Verified</string>
     <string name="comment_pinned">Pinned</string>
+    <!-- PrimeTube home -->
+    <string name="home_recommended">Recommended</string>
+    <string name="home_recommended_empty">No recommendations yet. Watch a few videos and your home feed will build itself around what you like.</string>
+    <string name="home_continue_empty">Nothing to continue right now. Videos you haven\'t finished will show up here.</string>
 </resources>
