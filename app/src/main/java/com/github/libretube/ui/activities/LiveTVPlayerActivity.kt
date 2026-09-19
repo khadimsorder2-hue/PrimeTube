@@ -36,6 +36,7 @@ import com.github.libretube.helpers.NetworkHelper
 import com.github.libretube.ui.adapters.LiveTVAdapter
 import com.github.libretube.ui.models.LiveChannel
 import com.github.libretube.ui.views.SafeLinearLayoutManager
+import com.github.libretube.services.LiveTvPlaybackService
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -379,6 +380,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     if (gestureActive) {
                         val ratio = dy / v.height
                         if (gestureBrightness) applyBrightness(ratio) else applyVolume(ratio)
+                        true
                     } else {
                         false
                     }
