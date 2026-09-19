@@ -353,6 +353,12 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
      * Immediately promote the service to foreground with a placeholder notification instead.
      * It uses the same notification id as the media3 DefaultMediaNotificationProvider, so it is
      * seamlessly replaced as soon as the real playback notification is posted.
+     *
+     * The service is also demoted from the foreground by the system in a number of situations
+     * (dismissed notification, stopped/errored playback) while media items may still be attached
+     * to the player. In that state a subsequent startForegroundService() would never reach
+     * startForeground() again - so promote unless the player is *actively* playing, which is the
+     * only state in which media3 is guaranteed to already own the foreground notification.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         promiseForegroundIfNeeded()
@@ -361,15 +367,22 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
     private fun promiseForegroundIfNeeded() {
         val player = exoPlayer
-        val hasPlaybackContent = player != null &&
-            (player.currentMediaItem != null || player.playbackState != Player.STATE_IDLE)
-        // media3 already manages (or is about to post) the real playback notification
-        if (hasPlaybackContent) return
+        // only skip when media3 definitely owns the foreground: playback is active
+        val media3OwnsForeground = player != null &&
+            player.currentMediaItem != null &&
+            player.playbackState != Player.STATE_IDLE &&
+            player.playerError == null &&
+            (player.isPlaying || player.playWhenReady)
+        if (media3OwnsForeground) return
 
         runCatching {
+            // use the metadata of the current item (if any) so that the placeholder looks
+            // like a regular playback notification instead of a blank one
+            val metadata = player?.currentMediaItem?.mediaMetadata
             val notification = NotificationCompat.Builder(this, PLAYER_CHANNEL_NAME)
                 .setSmallIcon(R.drawable.ic_launcher_lockscreen)
-                .setContentTitle(getString(R.string.app_name))
+                .setContentTitle(metadata?.title ?: getString(R.string.app_name))
+                .setContentText(metadata?.artist)
                 .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
                 .setOngoing(true)
                 .setShowWhen(false)

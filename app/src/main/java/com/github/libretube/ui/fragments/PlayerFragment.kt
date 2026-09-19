@@ -221,7 +221,15 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            PictureInPictureCompat.setPictureInPictureParams(requireActivity(), pipParams)
+            // PrimeTube: the player state can change while the fragment is already detached
+            // (e.g. during PiP handoff or rotation) - updating the PiP params is best-effort
+            // and must never crash the app here
+            val fragmentActivity = activity
+            if (fragmentActivity != null && _binding != null) {
+                runCatching {
+                    PictureInPictureCompat.setPictureInPictureParams(fragmentActivity, pipParams)
+                }
+            }
 
             if (isPlaying && PlayerHelper.sponsorBlockEnabled) {
                 handler.postDelayed(
@@ -859,7 +867,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     private fun openOrCloseFullscreenDialog(open: Boolean) {
         val playerView = binding.player
-        (playerView.parent as ViewGroup).removeView(playerView)
+        // PrimeTube: the player view might already be detached when this is called during
+        // the PiP transition - don't crash on a hard cast in that case
+        (playerView.parent as? ViewGroup)?.removeView(playerView)
 
         if (open) {
             fullscreenDialog.addContentView(
