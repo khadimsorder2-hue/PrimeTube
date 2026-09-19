@@ -302,6 +302,12 @@ class CustomExoPlayerView(
                 args.getString(IntentData.videoId) ?: return@setFragmentResultListener
             )
         }
+
+        // PrimeTube: the queue (playlist) button in the player top bar
+        binding.queueToggle.setOnClickListener {
+            PlayingQueueSheet().show(supportFragmentManager, null)
+        }
+
         updateMarginsByFullscreenMode()
 
         commonPlayerViewModel.isFullscreen.observe(viewLifecycleOwner) { isFullscreen ->
