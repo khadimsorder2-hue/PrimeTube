@@ -120,9 +120,11 @@ class CustomExoPlayerView(
                 value
             )
         }
+        // PrimeTube: default to FILL (like the YouTube app's "Fill screen") so fullscreen
+        // videos use the whole display without black bars, unless the user chose otherwise
         get() = PreferenceHelper.getInt(
             PreferenceKeys.PLAYER_RESIZE_MODE,
-            AspectRatioFrameLayout.RESIZE_MODE_FIT
+            AspectRatioFrameLayout.RESIZE_MODE_FILL
         )
     private val resizeModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to R.string.resize_mode_fit,
