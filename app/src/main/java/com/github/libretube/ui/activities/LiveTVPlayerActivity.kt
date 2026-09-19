@@ -31,6 +31,7 @@ import com.github.libretube.databinding.ActivityLiveTvPlayerBinding
 import com.github.libretube.helpers.BackgroundHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.LiveTvHelper
+import com.github.libretube.helpers.LiveTvState
 import com.github.libretube.helpers.NetworkHelper
 import com.github.libretube.ui.adapters.LiveTVAdapter
 import com.github.libretube.ui.models.LiveChannel
@@ -195,6 +196,10 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         errorRetries = 0
         binding.liveTitle.text = channel.name
         updateHeaderLogo()
+
+        // PrimeTube: keep the mini bar state in sync
+        LiveTvState.channelName = channel.name
+        LiveTvState.channelLogo = channel.logo
 
         // PrimeTube: without internet there is no play
         if (!NetworkHelper.isNetworkAvailable(this)) {

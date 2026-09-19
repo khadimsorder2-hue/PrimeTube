@@ -50,14 +50,20 @@
                         android:layout_height="match_parent"
                         android:src="@drawable/prime_circle_red" />
 
-                    <androidx.appcompat.widget.AppCompatTextView
+                    <!-- PrimeTube: developer profile photo (circular) -->
+                    <androidx.cardview.widget.CardView
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:text="KI"
-                        android:textColor="@android:color/white"
-                        android:textStyle="bold"
-                        android:textSize="30sp" />
+                        android:layout_margin="3dp"
+                        app:cardCornerRadius="40dp"
+                        app:cardElevation="0dp">
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/prime_profile" />
+                    </androidx.cardview.widget.CardView>
                 </FrameLayout>
 
                 <androidx.appcompat.widget.AppCompatTextView
