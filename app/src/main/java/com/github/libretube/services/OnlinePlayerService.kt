@@ -161,7 +161,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
             // PrimeTube: if the instance only offers streams below 1440p, fetch YouTube's
             // official DASH manifest as a higher-quality (1440p/2160p) fallback source.
-            officialDashManifest = fetchOfficialDashManifestIfNeeded(streams)
+            officialDashManifest = streams?.let { fetchOfficialDashManifestIfNeeded(it) }
 
             streams?.toStreamItem(videoId)?.let {
                 // save the current stream to the queue
