@@ -252,7 +252,17 @@ object PlayerHelper {
     val skipButtonsEnabled: Boolean
         get() = PreferenceHelper.getBoolean(
             PreferenceKeys.SKIP_BUTTONS,
-            false
+            // PrimeTube: show previous/next buttons out of the box, like YouTube
+            true
+        )
+
+    /**
+     * PrimeTube: swipe horizontally on the fullscreen player to play the next/previous video
+     */
+    val swipeVideoSwitchEnabled: Boolean
+        get() = PreferenceHelper.getBoolean(
+            PreferenceKeys.SWIPE_VIDEO_SWITCH,
+            true
         )
 
     var autoPlayEnabled: Boolean
@@ -323,7 +333,8 @@ object PlayerHelper {
     val longPressFastForward: Boolean
         get() = PreferenceHelper.getBoolean(
             PreferenceKeys.LONG_PRESS_FAST_FORWARD,
-            false
+            // PrimeTube: hold-to-2x is enabled by default, like the YouTube app
+            true
         )
 
     private val alternativePiPControls: Boolean

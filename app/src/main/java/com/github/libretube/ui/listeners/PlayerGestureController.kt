@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import androidx.activity.viewModels
+import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.ui.base.BaseActivity
 import com.github.libretube.ui.interfaces.PlayerGestureOptions
 import com.github.libretube.ui.models.CommonPlayerViewModel
@@ -30,6 +31,11 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
     private var isFullscreen = false
     private var scaleGestureWasInProgress = false
     private var isMoving = false
+
+    // PrimeTube: remember the gesture axis so that a vertical swipe that drifts
+    // horizontally (or vice versa) never switches the gesture type mid-way
+    private var horizontalGesture = false
+
     var longPressInProgress = false
     var lastDoublePressTime: Instant? = null
 
@@ -49,6 +55,7 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 scaleGestureWasInProgress = false
+                horizontalGesture = false
 
                 val (_, height) = listener.getViewMeasures()
                 if (event.y < height * 0.1f && orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -88,6 +95,7 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                 if (isMoving) listener.onSwipeEnd()
                 isMoving = false
+                horizontalGesture = false
 
                 if (longPressInProgress) listener.onLongPressEnd()
                 longPressInProgress = false
@@ -206,9 +214,34 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
             val insideBorder =
                 (e1.x < BORDER_THRESHOLD || e1.y < BORDER_THRESHOLD || e1.x > width - BORDER_THRESHOLD || e1.y > height - BORDER_THRESHOLD)
 
-            // If the movement is inside threshold or scroll is horizontal then return false
-            if (!isMoving && (insideThreshHold || insideBorder || abs(distanceX) > abs(distanceY))) {
-                return false
+            if (!isMoving) {
+                // PrimeTube: lock the gesture axis to the first significant movement.
+                // A dominant horizontal movement switches videos (in fullscreen), everything
+                // else keeps the vertical brightness/volume/minimize behavior.
+                val horizontalDominant = abs(e2.x - e1.x) > abs(e2.y - e1.y) &&
+                    abs(e2.x - e1.x) > MOVEMENT_THRESHOLD
+                if (horizontalDominant) {
+                    if (isFullscreen &&
+                        !longPressInProgress &&
+                        !scaleGestureWasInProgress &&
+                        PlayerHelper.swipeVideoSwitchEnabled
+                    ) {
+                        isMoving = true
+                        horizontalGesture = true
+                        listener.onSwipeHorizontalScreen((e1.x - e2.x) / width)
+                        return true
+                    }
+                    return false
+                }
+
+                if (insideThreshHold || insideBorder) {
+                    return false
+                }
+            }
+
+            if (horizontalGesture) {
+                listener.onSwipeHorizontalScreen((e1.x - e2.x) / width)
+                return true
             }
 
             isMoving = true

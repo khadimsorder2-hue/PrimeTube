@@ -747,6 +747,12 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             PlayingQueue.getNext()?.let { next -> playNextVideo(next) }
         }
 
+        // PrimeTube: horizontal swipe on the fullscreen player switches the video
+        binding.player.onSwitchVideo = { next ->
+            val newVideoId = if (next) PlayingQueue.getNext() else PlayingQueue.getPrev()
+            newVideoId?.let { playNextVideo(it) }
+        }
+
         binding.relPlayerDownload.setOnClickListener {
             if (!this::streams.isInitialized) return@setOnClickListener
 

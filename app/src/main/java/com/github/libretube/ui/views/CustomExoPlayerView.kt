@@ -83,6 +83,7 @@ import com.github.libretube.ui.sheets.StatsSheet
 import com.github.libretube.ui.tools.SleepTimer
 import com.github.libretube.util.PlayingQueue
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.ceil
 
 @SuppressLint("ClickableViewAccessibility")
@@ -144,6 +145,17 @@ class CustomExoPlayerView(
      * has been triggered by a long press.
      */
     private var rememberedPlaybackSpeed: Float? = null
+
+    /**
+     * PrimeTube: called when a horizontal swipe on the fullscreen player requested
+     * switching the video. The parameter is true when the next video was requested
+     * and false when the previous one was requested.
+     */
+    var onSwitchVideo: ((next: Boolean) -> Unit)? = null
+
+    // PrimeTube: state of an ongoing horizontal video switch gesture
+    private var videoSwitchInProgress = false
+    private var videoSwitchDistanceFraction = 0f
 
     private fun toggleController(show: Boolean = !isControllerFullyVisible) {
         if (show) showController() else hideController()
@@ -1302,9 +1314,51 @@ class CustomExoPlayerView(
     }
 
     override fun onSwipeEnd() {
+        // PrimeTube: finish an ongoing horizontal video switch gesture
+        if (videoSwitchInProgress) {
+            videoSwitchInProgress = false
+
+            val distanceFraction = videoSwitchDistanceFraction
+            videoSwitchDistanceFraction = 0f
+
+            backgroundBinding.videoSwitchOverlay.isGone = true
+
+            if (abs(distanceFraction) >= VIDEO_SWITCH_THRESHOLD_FRACTION) {
+                onSwitchVideo?.invoke(distanceFraction > 0)
+            }
+            return
+        }
+
         fullscreenGestureAnimationController.onSwipeEnd()
         gestureViewBinding.brightnessControlView.isGone = true
         gestureViewBinding.volumeControlView.isGone = true
+    }
+
+    /**
+     * PrimeTube: horizontal swipe on the fullscreen player surface - show the direction
+     * overlay while dragging and prepare the switch decision for [onSwipeEnd].
+     */
+    override fun onSwipeHorizontalScreen(distanceFraction: Float) {
+        videoSwitchInProgress = true
+        videoSwitchDistanceFraction = distanceFraction
+
+        val overlay = backgroundBinding.videoSwitchOverlay
+        val nextRequested = distanceFraction >= 0
+        (overlay.getChildAt(0) as? TextView)?.let { textView ->
+            textView.setText(
+                if (nextRequested) R.string.play_next else R.string.play_previous
+            )
+            // mirror the arrow direction depending on the swipe direction
+            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_next)
+            drawable?.setTint(Color.WHITE)
+            textView.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                if (nextRequested) null else drawable,
+                null,
+                if (nextRequested) drawable else null,
+                null
+            )
+        }
+        overlay.isVisible = true
     }
 
     override fun onZoom() {
@@ -1329,20 +1383,12 @@ class CustomExoPlayerView(
         backgroundBinding.fastForwardView.isVisible = true
         val player = player ?: return
 
-        // using the fast forward action wouldn't change anything in this case
-        if (player.playbackParameters.speed >= PlayerHelper.MAXIMUM_PLAYBACK_SPEED) {
-            return
-        }
-
         // backup current playback speed in order to restore it
         // after the fast forward action is done
         rememberedPlaybackSpeed = player.playbackParameters.speed
 
-        val newSpeed = minOf(
-            player.playbackParameters.speed * PlayerHelper.FAST_FORWARD_SPEED_FACTOR,
-            PlayerHelper.MAXIMUM_PLAYBACK_SPEED
-        )
-        player.playbackParameters = PlaybackParameters(newSpeed, player.playbackParameters.pitch)
+        // PrimeTube: hold to play at exactly 2x speed, like the YouTube app
+        player.playbackParameters = PlaybackParameters(2f, player.playbackParameters.pitch)
     }
 
     override fun onLongPressEnd() {
@@ -1492,6 +1538,10 @@ class CustomExoPlayerView(
         private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.158f
         private const val ANIMATION_DURATION = 100L
         private const val AUTO_HIDE_CONTROLLER_DELAY = 2000L
+
+        // PrimeTube: fraction of the player width the finger has to travel before
+        // releasing a horizontal swipe switches to the next/previous video
+        private const val VIDEO_SWITCH_THRESHOLD_FRACTION = 0.25f
         private val LANDSCAPE_MARGIN_HORIZONTAL = 20f.dpToPx()
         private val LANDSCAPE_MARGIN_HORIZONTAL_NONE = 0f.dpToPx()
     }

@@ -56,6 +56,7 @@ object PreferenceKeys {
     const val CAPTION_SETTINGS = "caption_settings"
     const val RICH_CAPTION_RENDERING = "rich_caption_rendering"
     const val SEEK_INCREMENT = "seek_increment"
+    const val SWIPE_VIDEO_SWITCH = "swipe_video_switch"
     const val DEFAULT_RESOLUTION = "default_res"
     const val DEFAULT_RESOLUTION_MOBILE = "default_res_mobile"
     const val BUFFERING_GOAL = "buffering_goal"

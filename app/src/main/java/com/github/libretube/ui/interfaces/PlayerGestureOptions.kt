@@ -18,6 +18,15 @@ interface PlayerGestureOptions {
 
     fun onSwipeEnd()
 
+    /**
+     * PrimeTube: horizontal swipe on the fullscreen player surface.
+     *
+     * @param distanceFraction the total horizontal distance from the gesture start,
+     * relative to the view width. Positive values mean the finger is dragged to the
+     * left (= next video), negative values to the right (= previous video).
+     */
+    fun onSwipeHorizontalScreen(distanceFraction: Float)
+
     fun onZoom()
 
     fun onMinimize()

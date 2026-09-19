@@ -133,4 +133,31 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"/>
 
+    <!-- PrimeTube: overlay shown while swiping horizontally to switch videos -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/video_switch_overlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        app:cardBackgroundColor="#AA000000"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
+
+        <TextView
+            android:id="@+id/video_switch_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:drawablePadding="8dp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            tools:text="Play next"
+            tools:visibility="visible" />
+
+    </com.google.android.material.card.MaterialCardView>
+
 </merge>
