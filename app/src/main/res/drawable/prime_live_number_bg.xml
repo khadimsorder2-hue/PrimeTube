@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: rounded pill background for the Live TV channel number badge -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#CCFF0000" />
+    <corners android:radius="8dp" />
+</shape>

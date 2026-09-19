@@ -43,6 +43,14 @@
             android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation|uiMode"
             android:screenOrientation="locked" />
 
+        <!-- PrimeTube: dedicated full-screen player for Live TV (IPTV) channels -->
+        <activity
+            android:name=".ui.activities.LiveTVPlayerActivity"
+            android:label="@string/prime_live_tv"
+            android:launchMode="singleTop"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation|uiMode" />
+
         <activity
             android:name=".ui.activities.SettingsActivity"
             android:label="@string/settings"

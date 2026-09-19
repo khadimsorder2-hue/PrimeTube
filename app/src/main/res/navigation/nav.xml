@@ -70,6 +70,12 @@
         android:name="com.github.libretube.ui.fragments.ContinueWatchingFragment"
         android:label="@string/continue_watching"
         tools:layout="@layout/fragment_continue_watching" />
+    <!-- PrimeTube: Live TV tab - IPTV playlist channels in a numbered grid -->
+    <fragment
+        android:id="@+id/liveTVFragment"
+        android:name="com.github.libretube.ui.fragments.LiveTVFragment"
+        android:label="@string/prime_live_tv"
+        tools:layout="@layout/fragment_live_tv" />
     <fragment
         android:id="@+id/libraryFragment"
         android:name="com.github.libretube.ui.fragments.LibraryFragment"

@@ -613,6 +613,11 @@
     <string name="prime_source_fallback">Primary source failed — retried with an alternative source</string>
     <string name="prime_stream_failed">Could not load this video. The instance may be blocked by YouTube — try another instance in Settings → Instance.</string>
     <string name="prime_removed_from_list">Removed</string>
+    <!-- PrimeTube: Live TV (IPTV) tab -->
+    <string name="prime_live_tv">Live TV</string>
+    <string name="prime_live_tv_failed">Couldn\'t load the TV playlist. Check your connection.</string>
+    <string name="prime_live_player_error">Playback error - this channel may be offline.</string>
+    <string name="prime_queue_title">Queue</string>
     <string name="tooltip_filter">Filter</string>
     <string name="tooltip_edit_groups">Edit groups</string>
     <string name="tooltip_create_playlist">Create playlist</string>

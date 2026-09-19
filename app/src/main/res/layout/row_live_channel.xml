@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: Live TV channel card - numbered, logo, name (grid item) -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/channelCard"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:clickable="true"
+    android:focusable="true"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="?attr/colorSurfaceVariant"
+    app:rippleColor="#33FF0000"
+    app:strokeWidth="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="86dp"
+            android:background="#0E0E0E">
+
+            <ImageView
+                android:id="@+id/channelLogo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="12dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/prime_live_tv"
+                tools:src="@drawable/ic_nav_live" />
+
+            <TextView
+                android:id="@+id/channelNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="6dp"
+                android:background="@drawable/prime_live_number_bg"
+                android:paddingHorizontal="7dp"
+                android:paddingVertical="2dp"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                tools:text="01" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/channelName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            tools:text="T Sports HD" />
+
+        <TextView
+            android:id="@+id/channelGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginTop="1dp"
+            android:layout_marginBottom="7dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="10sp"
+            tools:text="TV" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

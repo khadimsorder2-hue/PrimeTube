@@ -29,11 +29,10 @@
         android:title="@string/downloads"
         android:visible="false" />
 
-    <!-- PrimeTube: sign in / account entry (avatar icon), opens the sign-in
-         dialog or the account actions when already signed in -->
+    <!-- PrimeTube: Live TV - IPTV playlist channels in a numbered grid (4th item) -->
     <item
-        android:id="@+id/signInNavItem"
-        android:icon="@drawable/ic_avatar"
-        android:title="@string/prime_sign_in" />
+        android:id="@+id/liveTVFragment"
+        android:icon="@drawable/ic_nav_live"
+        android:title="@string/prime_live_tv" />
 
 </menu>
