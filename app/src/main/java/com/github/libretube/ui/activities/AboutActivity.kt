@@ -79,8 +79,6 @@ class AboutActivity : BaseActivity() {
     companion object {
         // PrimeTube: point all GitHub links to the PrimeTube repository
         const val GITHUB_URL = "https://github.com/khadimsorder2-hue/PrimeTube"
-        @Deprecated("PrimeTube: donate links removed from the UI")
-        const val DONATE_URL = "https://github.com/libre-tube/LibreTube#donate"
         private const val ISSUES_URL = "https://github.com/khadimsorder2-hue/PrimeTube/issues"
     }
 }

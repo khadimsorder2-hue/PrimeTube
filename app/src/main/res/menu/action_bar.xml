@@ -10,19 +10,10 @@
         app:actionViewClass="androidx.appcompat.widget.SearchView"
         app:showAsAction="ifRoom|collapseActionView" />
 
+    <!-- PrimeTube: help and donate entries removed by request of the app owner -->
     <item
         android:id="@+id/action_settings"
         android:title="@string/settings"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/action_help"
-        android:title="@string/help"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/action_donate"
-        android:title="@string/donate"
         app:showAsAction="never" />
 
     <item
