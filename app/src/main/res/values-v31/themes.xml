@@ -4,6 +4,7 @@
         <item name="colorSurface">@android:color/white</item>
         <item name="android:colorBackground">@android:color/white</item>
 
+        <item name="android:windowSplashScreenBackground">@color/yt_launcher_red</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_anim</item>
     </style>
 </resources>
