@@ -28,4 +28,15 @@
             android:inputType="textPassword" />
     </com.google.android.material.textfield.TextInputLayout>
 
+    <!-- PrimeTube: short hint + how the register button works -->
+    <androidx.appcompat.widget.AppCompatTextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginTop="2dp"
+        android:text="@string/prime_login_hint"
+        android:textSize="12sp"
+        android:alpha="0.7" />
+
 </LinearLayout>
