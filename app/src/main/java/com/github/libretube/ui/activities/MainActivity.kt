@@ -270,6 +270,10 @@ class MainActivity : AbstractPlayerHostActivity() {
                 .indexOfFirst { it.uploaded <= lastCheckedFeedTime }
             if (lastSeenVideoIndex < 1) return@observe
 
+            // PrimeTube: the subscriptions item may have been replaced in the bottom
+            // navigation - only badge it when it is still part of the menu
+            if (binding.bottomNav.menu.findItem(R.id.subscriptionsFragment) == null) return@observe
+
             binding.bottomNav.getOrCreateBadge(R.id.subscriptionsFragment).apply {
                 number = lastSeenVideoIndex
                 backgroundColor = ThemeHelper.getThemeColor(
@@ -598,7 +602,9 @@ class MainActivity : AbstractPlayerHostActivity() {
     }
 
     private fun navigateToBottomSelectedItem(item: MenuItem): Boolean {
-        if (item.itemId == R.id.subscriptionsFragment) {
+        if (item.itemId == R.id.subscriptionsFragment &&
+            binding.bottomNav.menu.findItem(R.id.subscriptionsFragment) != null
+        ) {
             binding.bottomNav.removeBadge(R.id.subscriptionsFragment)
         }
 

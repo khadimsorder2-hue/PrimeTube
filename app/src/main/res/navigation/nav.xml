@@ -64,6 +64,12 @@
         android:name="com.github.libretube.ui.fragments.SubscriptionsFragment"
         android:label="fragment_subscriptions"
         tools:layout="@layout/fragment_subscriptions" />
+    <!-- PrimeTube: dedicated "Continue watching" tab (replaces subscriptions in the nav bar) -->
+    <fragment
+        android:id="@+id/continueWatchingFragment"
+        android:name="com.github.libretube.ui.fragments.ContinueWatchingFragment"
+        android:label="@string/continue_watching"
+        tools:layout="@layout/fragment_continue_watching" />
     <fragment
         android:id="@+id/libraryFragment"
         android:name="com.github.libretube.ui.fragments.LibraryFragment"

@@ -7,8 +7,6 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.github.libretube.R
 import com.github.libretube.api.obj.StreamItem
 import com.github.libretube.constants.PreferenceKeys
@@ -27,11 +25,11 @@ import com.google.android.material.snackbar.Snackbar
  *
  * A pinned filter chip row switches the feed in place:
  * - "All" mixes the personalized recommendations with the newest videos of subscribed
- *   channels and keeps a horizontal "Continue watching" shelf on top, like on YouTube.
+ *   channels, like on YouTube.
  * - "Recommended" only shows usage-based recommendations (videos related to what the
  *   user watched recently).
- * - "Continue watching" shows unfinished videos from the watch history.
  *
+ * Unfinished videos live in their own "Continue watching" tab in the bottom navigation.
  * No trending feed is used anywhere on the home screen.
  */
 class HomeFragment : Fragment(R.layout.fragment_home) {
@@ -42,40 +40,28 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private val subscriptionsViewModel: SubscriptionsViewModel by activityViewModels()
 
     private val feedAdapter = VideoCardsAdapter()
-    private val watchingAdapter = VideoCardsAdapter(columnWidthDp = 250f)
 
     private var currentMode = MODE_ALL
-    private var continueWatchingItems: List<StreamItem> = emptyList()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = FragmentHomeBinding.bind(view)
         super.onViewCreated(view, savedInstanceState)
 
-        binding.watchingRV.layoutManager =
-            LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
-        binding.watchingRV.adapter = watchingAdapter
         binding.trendingRV.adapter = feedAdapter
 
         // PrimeTube: trim RecyclerView animations and caches depending on the RAM profile
         if (PerformanceHelper.isLowRamDevice()) {
             // change animations cause relayouts and flickering during feed updates
             binding.trendingRV.itemAnimator = null
-            binding.watchingRV.itemAnimator = null
         } else {
             // keep more bound views around for smoother fast scrolling
             binding.trendingRV.setItemViewCacheSize(8)
-            binding.watchingRV.setItemViewCacheSize(4)
         }
 
         with(homeViewModel) {
             feed.observe(viewLifecycleOwner) { render() }
             recommended.observe(viewLifecycleOwner) { render() }
-            continueWatching.observe(viewLifecycleOwner, ::showContinueWatching)
             isLoading.observe(viewLifecycleOwner, ::updateLoading)
-        }
-
-        binding.watchingTV.setOnClickListener {
-            findNavController().navigate(R.id.action_homeFragment_to_watchHistoryFragment)
         }
 
         binding.refresh.setOnRefreshListener {
@@ -104,9 +90,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
 
         if (homeViewModel.loadedSuccessfully.value == false) {
             fetchHomeFeed()
-        } else {
-            // watch positions may have changed after watching a video
-            homeViewModel.refreshContinueWatching()
         }
     }
 
@@ -122,12 +105,10 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         val mode = PreferenceHelper.getString(PreferenceKeys.HOME_SELECTED_CHIP, MODE_ALL)
         currentMode = when (mode) {
             MODE_RECOMMENDED -> MODE_RECOMMENDED
-            MODE_CONTINUE -> MODE_CONTINUE
             else -> MODE_ALL
         }
         val chipId = when (currentMode) {
             MODE_RECOMMENDED -> R.id.chip_recommended
-            MODE_CONTINUE -> R.id.chip_continue
             else -> R.id.chip_all
         }
         binding.homeChips.check(chipId)
@@ -136,7 +117,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private fun selectChip(checkedId: Int) {
         currentMode = when (checkedId) {
             R.id.chip_recommended -> MODE_RECOMMENDED
-            R.id.chip_continue -> MODE_CONTINUE
             else -> MODE_ALL
         }
         PreferenceHelper.putString(PreferenceKeys.HOME_SELECTED_CHIP, currentMode)
@@ -162,8 +142,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
 
         val list = when (currentMode) {
             MODE_ALL -> mixFeeds(recommended, feed)
-            MODE_RECOMMENDED -> recommended
-            else -> continueWatchingItems
+            else -> recommended
         }
 
         binding.homeEmpty.isVisible = list.isEmpty() && homeViewModel.isLoading.value != true
@@ -199,24 +178,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         }
 
         return mixed
-    }
-
-    private fun showContinueWatching(unwatchedVideos: List<StreamItem>?) {
-        if (unwatchedVideos == null) return
-        continueWatchingItems = unwatchedVideos
-        updateContinueWatchingShelf()
-        render()
-    }
-
-    /**
-     * The horizontal "Continue watching" shelf is only visible on the "All" chip,
-     * like on the YouTube home.
-     */
-    private fun updateContinueWatchingShelf() {
-        val showShelf = currentMode == MODE_ALL && continueWatchingItems.isNotEmpty()
-        binding.watchingTV.isVisible = showShelf
-        binding.watchingRV.isVisible = showShelf
-        watchingAdapter.submitList(continueWatchingItems)
     }
 
     private fun updateLoading(isLoading: Boolean) {
@@ -279,7 +240,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     companion object {
         private const val MODE_ALL = "all"
         private const val MODE_RECOMMENDED = "recommended"
-        private const val MODE_CONTINUE = "continue"
         private const val MAX_MIXED_ITEMS = 60
         private const val RECOMMENDATIONS_PER_SUBSCRIBED_VIDEO = 2
     }

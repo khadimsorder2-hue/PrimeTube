@@ -53,39 +53,9 @@
                         android:layout_height="wrap_content"
                         android:text="@string/home_recommended" />
 
-                    <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_continue"
-                        style="@style/Widget.Material3.Chip.Filter"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/continue_watching" />
-
                 </com.google.android.material.chip.ChipGroup>
 
             </HorizontalScrollView>
-
-            <LinearLayout
-                android:id="@+id/watchingTV"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?selectableItemBackground"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <TextView
-                    style="@style/HomeCategoryTitle"
-                    android:text="@string/continue_watching"
-                    app:drawableEndCompat="@drawable/ic_arrow_right" />
-
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/watchingRV"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:clipToPadding="false"
-                android:visibility="gone"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
             <!-- PrimeTube: shown when the selected chip has no videos yet -->
             <TextView

@@ -38,7 +38,6 @@ class HomeViewModel : ViewModel() {
 
     val feed: MutableLiveData<List<StreamItem>> = MutableLiveData(null)
     val recommended: MutableLiveData<List<StreamItem>> = MutableLiveData(null)
-    val continueWatching: MutableLiveData<List<StreamItem>> = MutableLiveData(null)
     val isLoading: MutableLiveData<Boolean> = MutableLiveData(true)
     val loadedSuccessfully: MutableLiveData<Boolean> = MutableLiveData(false)
 
@@ -53,7 +52,6 @@ class HomeViewModel : ViewModel() {
      * - [recommended]: videos related to what the user watched recently (usage-based
      *   personalization) - related videos of the most recent watch history entries are
      *   fetched in parallel and mixed together
-     * - [continueWatching]: videos from the watch history that have not been finished
      */
     fun loadHomeFeed(
         subscriptionsViewModel: SubscriptionsViewModel,
@@ -75,10 +73,9 @@ class HomeViewModel : ViewModel() {
                         } else {
                             recommended.updateIfChanged(recommendedCache.orEmpty())
                         }
-                    },
-                    async { loadVideosToContinueWatching() }
+                    }
                 )
-                loadedSuccessfully.value = listOf(feed, recommended, continueWatching)
+                loadedSuccessfully.value = listOf(feed, recommended)
                     .any { !it.value.isNullOrEmpty() }
                 isLoading.value = false
             }
@@ -90,14 +87,6 @@ class HomeViewModel : ViewModel() {
                 }
             }
         }
-    }
-
-    /**
-     * Cheap re-load of the continue-watching shelf, e.g. when returning to the home
-     * fragment after watching a video.
-     */
-    fun refreshContinueWatching() {
-        viewModelScope.launch { loadVideosToContinueWatching() }
     }
 
     private suspend fun loadFeed(subscriptionsViewModel: SubscriptionsViewModel) {
@@ -169,21 +158,6 @@ class HomeViewModel : ViewModel() {
         }
 
         return result
-    }
-
-    private suspend fun loadVideosToContinueWatching() {
-        if (!PlayerHelper.watchHistoryEnabled) return
-        runSafely(
-            onSuccess = { videos -> continueWatching.updateIfChanged(videos) },
-            ioBlock = ::loadWatchingFromDB
-        )
-    }
-
-    private suspend fun loadWatchingFromDB(): List<StreamItem> {
-        val videos = DatabaseHelper.getWatchHistoryPage(1, 20)
-
-        return DatabaseHelper
-            .filterUnwatched(videos.map { it.toStreamItem() })
     }
 
     private suspend fun tryLoadFeed(subscriptionsViewModel: SubscriptionsViewModel): List<StreamItem> {
