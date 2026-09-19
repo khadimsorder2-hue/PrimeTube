@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -131,15 +132,17 @@ class HomeViewModel : ViewModel() {
         if (seedIds.isEmpty()) return emptyList()
 
         val semaphore = Semaphore(MAX_CONCURRENT_FETCHES)
-        val relatedLists = seedIds.map { videoId ->
-            async(Dispatchers.IO) {
-                semaphore.withPermit {
-                    runCatching {
-                        MediaServiceRepository.instance.getStreams(videoId).relatedStreams
-                    }.getOrDefault(emptyList())
+        val relatedLists = coroutineScope {
+            seedIds.map { videoId ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        runCatching {
+                            MediaServiceRepository.instance.getStreams(videoId).relatedStreams
+                        }.getOrDefault(emptyList())
+                    }
                 }
-            }
-        }.awaitAll()
+            }.awaitAll()
+        }
 
         // round-robin over the related videos of every seed so the feed stays mixed
         val seen = mutableSetOf<String>()
