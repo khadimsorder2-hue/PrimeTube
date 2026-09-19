@@ -1,16 +1,23 @@
 package com.github.libretube.services
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
+import android.app.Notification
+import android.app.PendingIntent
 import androidx.annotation.CallSuper
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
+import androidx.core.app.PendingIntentCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.core.os.postDelayed
 import androidx.media3.common.C
@@ -25,6 +32,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaStyleNotificationHelper
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.github.libretube.R
@@ -61,6 +69,12 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
     private var notificationProvider: NowPlayingNotification? = null
     var trackSelector: DefaultTrackSelector? = null
+
+    /**
+     * PrimeTube: receives the playback actions (previous / rewind / play-pause /
+     * forward / next) of our own full foreground notification
+     */
+    private var foregroundActionReceiver: BroadcastReceiver? = null
 
     lateinit var videoId: String
 
@@ -313,13 +327,7 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
      * Trigger a notification update with an updated PendingIntent.
      */
     private fun updateNotification() {
-        val notificationIntent = Intent(this, getIntentActivity()).apply {
-            putExtra(IntentData.maximizePlayer, true)
-            putExtra(IntentData.offlinePlayer, isOfflinePlayer)
-            putExtra(IntentData.audioOnly, isAudioOnlyPlayer)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        notificationProvider?.notificationIntent = notificationIntent
+        notificationProvider?.notificationIntent = buildNotificationIntent()
         triggerNotificationUpdate()
     }
 
@@ -338,6 +346,8 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
         notificationProvider = NowPlayingNotification(this)
         setMediaNotificationProvider(notificationProvider!!)
+
+        registerForegroundActionReceiver()
 
         createPlayerAndMediaSession()
     }
@@ -363,21 +373,10 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
     private fun promiseForeground() {
         runCatching {
-            // use the metadata of the current item (if any) so that the placeholder looks
-            // like a regular playback notification instead of a blank one
-            val metadata = exoPlayer?.currentMediaItem?.mediaMetadata
-            val notification = NotificationCompat.Builder(this, PLAYER_CHANNEL_NAME)
-                .setSmallIcon(R.drawable.ic_launcher_lockscreen)
-                .setContentTitle(metadata?.title ?: getString(R.string.app_name))
-                .setContentText(metadata?.artist)
-                .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-                .setOngoing(true)
-                .setShowWhen(false)
-                .build()
             ServiceCompat.startForeground(
                 this,
                 NotificationId.PLAYER_PLAYBACK.id,
-                notification,
+                buildForegroundNotification(),
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 } else {
@@ -385,6 +384,138 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
                 }
             )
         }
+    }
+
+    /**
+     * PrimeTube: build a FULL media notification for the startForeground promise.
+     *
+     * Previously this was a bare "info only" placeholder which was then NOT always
+     * replaced by media3's own notification (e.g. after media button events), leaving
+     * the user with a notification without any controls. This one has previous,
+     * rewind, play/pause, forward and next actions plus the media style with the
+     * session token, so the system shows the seekbar for it as well.
+     */
+    @OptIn(UnstableApi::class)
+    private fun buildForegroundNotification(): Notification {
+        val metadata = exoPlayer?.currentMediaItem?.mediaMetadata
+
+        val builder = NotificationCompat.Builder(this, PLAYER_CHANNEL_NAME)
+            .setSmallIcon(R.drawable.ic_launcher_lockscreen)
+            .setContentTitle(metadata?.title ?: getString(R.string.app_name))
+            .setContentText(metadata?.artist)
+            .setContentIntent(
+                PendingIntentCompat.getActivity(
+                    this,
+                    0,
+                    buildNotificationIntent(),
+                    PendingIntent.FLAG_UPDATE_CURRENT,
+                    false
+                )
+            )
+            .setDeleteIntent(
+                buildForegroundActionPendingIntent(PlayerEvent.Stop, REQUEST_CODE_STOP)
+            )
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        val isPlaying = runCatching { exoPlayer?.isPlaying == true }.getOrDefault(false)
+
+        builder.addAction(
+            R.drawable.ic_prev,
+            getString(androidx.media3.ui.R.string.exo_controls_previous),
+            buildForegroundActionPendingIntent(PlayerEvent.Prev, REQUEST_CODE_PREV)
+        )
+        builder.addAction(
+            R.drawable.ic_rewind,
+            getString(androidx.media3.ui.R.string.exo_controls_rewind),
+            buildForegroundActionPendingIntent(PlayerEvent.Rewind, REQUEST_CODE_REWIND)
+        )
+        builder.addAction(
+            if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
+            getString(
+                if (isPlaying) androidx.media3.ui.R.string.exo_controls_pause
+                else androidx.media3.ui.R.string.exo_controls_play
+            ),
+            buildForegroundActionPendingIntent(PlayerEvent.PlayPause, REQUEST_CODE_PLAY_PAUSE)
+        )
+        builder.addAction(
+            R.drawable.ic_forward,
+            getString(androidx.media3.ui.R.string.exo_controls_fast_forward),
+            buildForegroundActionPendingIntent(PlayerEvent.Forward, REQUEST_CODE_FORWARD)
+        )
+        builder.addAction(
+            R.drawable.ic_next,
+            getString(androidx.media3.ui.R.string.exo_controls_next),
+            buildForegroundActionPendingIntent(PlayerEvent.Next, REQUEST_CODE_NEXT)
+        )
+
+        // media style with the session token so that the system renders it as a
+        // proper media notification (compact actions + seekbar on Android 10+)
+        mediaLibrarySession?.let { session ->
+            builder.setStyle(
+                MediaStyleNotificationHelper.MediaStyle(session.token)
+                    .setShowActionsInCompactView(0, 2, 4)
+            )
+        }
+
+        return builder.build()
+    }
+
+    private fun buildNotificationIntent(): Intent = Intent(this, getIntentActivity()).apply {
+        putExtra(IntentData.maximizePlayer, true)
+        putExtra(IntentData.offlinePlayer, isOfflinePlayer)
+        putExtra(IntentData.audioOnly, isAudioOnlyPlayer)
+        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
+
+    private fun buildForegroundActionPendingIntent(event: PlayerEvent, requestCode: Int) =
+        PendingIntentCompat.getBroadcast(
+            this,
+            requestCode,
+            Intent(PRIME_PLAYER_ACTION)
+                .setPackage(packageName)
+                .putExtra(PlayerHelper.CONTROL_TYPE, event),
+            PendingIntent.FLAG_UPDATE_CURRENT,
+            false
+        )
+
+    private fun registerForegroundActionReceiver() {
+        if (foregroundActionReceiver != null) return
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val event = runCatching {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent?.getSerializableExtra(
+                            PlayerHelper.CONTROL_TYPE,
+                            PlayerEvent::class.java
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent?.getSerializableExtra(PlayerHelper.CONTROL_TYPE) as? PlayerEvent
+                    }
+                }.getOrNull() ?: return
+
+                handlePlayerAction(event)
+            }
+        }
+
+        foregroundActionReceiver = receiver
+        ContextCompat.registerReceiver(
+            this,
+            receiver,
+            IntentFilter(PRIME_PLAYER_ACTION),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    private fun unregisterForegroundActionReceiver() {
+        runCatching {
+            foregroundActionReceiver?.let { unregisterReceiver(it) }
+        }
+        foregroundActionReceiver = null
     }
 
     open fun getIntentActivity(): Class<*> = MainActivity::class.java
@@ -510,6 +641,8 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
             notificationProvider = null
             watchPositionTimer.destroy()
 
+            unregisterForegroundActionReceiver()
+
             handler.removeCallbacksAndMessages(null)
 
             runCatching {
@@ -577,6 +710,16 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
         private const val START_SERVICE_ACTION = "start_service_action"
         private const val STOP_SERVICE_ACTION = "stop_service_action"
         private const val RUN_PLAYER_COMMAND_ACTION = "run_player_command_action"
+
+        private const val PRIME_PLAYER_ACTION =
+            "com.github.libretube.services.AbstractPlayerService.FOREGROUND_ACTION"
+
+        private const val REQUEST_CODE_PREV = 101
+        private const val REQUEST_CODE_REWIND = 102
+        private const val REQUEST_CODE_PLAY_PAUSE = 103
+        private const val REQUEST_CODE_FORWARD = 104
+        private const val REQUEST_CODE_NEXT = 105
+        private const val REQUEST_CODE_STOP = 106
 
         val startServiceCommand = SessionCommand(START_SERVICE_ACTION, Bundle.EMPTY)
         val stopServiceCommand = SessionCommand(STOP_SERVICE_ACTION, Bundle.EMPTY)
