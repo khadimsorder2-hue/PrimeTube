@@ -627,4 +627,18 @@
     <string name="could_not_open_file">No app found to open this file</string>
     <!-- PrimeTube about -->
     <string name="prime_developer">Khademul Islam — PrimeTube Developer</string>
+    <string name="prime_about_developed_by">Developed by</string>
+    <string name="prime_about_dev_name">Khademul Islam</string>
+    <string name="prime_about_dev_role">PrimeTube Developer</string>
+    <string name="prime_about_repo">khadimsorder2-hue/PrimeTube</string>
+    <string name="prime_crash_log_title">Last crash report</string>
+    <string name="prime_copy_crash_log">Copy last crash log</string>
+    <string name="prime_report_bug">Report bug on GitHub</string>
+    <!-- PrimeTube login -->
+    <string name="prime_login_hint">Tip: no account yet? Tap REGISTER to create one on the selected instance.</string>
+    <string name="prime_login_help_title">How to sign in</string>
+    <string name="prime_login_help_msg">1. Pick a working instance first: Settings → Instance. Choose one that plays videos fine (e.g. piped.video).\n[বাংলা: আগে Settings → Instance থেকে এমন একটি ইনস্ট্যান্স বাছুন যেটা ভালোভাবে ভিডিও চালায়।]\n\n2. An account works on ONE instance only. No account yet? Tap REGISTER here and create one with any username + password.\n[বাংলা: অ্যাকাউন্ট শুধু একটি ইনস্ট্যান্সেই কাজ করে। নতুন অ্যাকাউন্ট লাগলে এখানেই REGISTER চেপে যেকোনো ইউজারনেম-পাসওয়ার্ড দিয়ে খুলুন।]\n\n3. Then tap SIGN IN with the same username and password.\n[বাংলা: এরপর একই ইউজারনেম-পাসওয়ার্ড দিয়ে SIGN IN চাপুন।]\n\n4. If you see “not a bot” or another error, that instance is blocked by YouTube → go to Settings → Instance and try another one.\n[বাংলা: “not a bot” বা এরর দেখলে বুঝবেন ওই ইনস্ট্যান্স YouTube-এর কাছে ব্লকড — Settings → Instance থেকে অন্যটা দিয়ে চেষ্টা করুন।]\n\nNote: subscriptions, playlists and login sync need a working instance. Watching videos itself works without login.\n[বাংলা: সাবস্ক্রিপশন, প্লেলিস্ট আর লগইন সিঙ্কের জন্য কাজ করা ইনস্ট্যান্স লাগে — শুধু ভিডিও দেখতে লগইন লাগে না।]</string>
+    <string name="prime_login_err_blocked">This instance is blocked by YouTube. Try another instance: Settings → Instance.</string>
+    <string name="prime_login_err_credentials">Wrong username or password - or no account with this name on the selected instance. Tap Help for instructions.</string>
+    <string name="prime_login_err_network">Can\'t reach the instance. Check your internet, or choose another instance in Settings → Instance.</string>
 </resources>

@@ -1,24 +1,23 @@
 package com.github.libretube.ui.activities
 
-import android.annotation.SuppressLint
-import android.content.res.Resources
-import android.os.Build
 import android.os.Bundle
-import androidx.core.text.HtmlCompat
-import androidx.core.text.parseAsHtml
+import android.view.View
 import com.github.libretube.R
 import com.github.libretube.databinding.ActivityAboutBinding
 import com.github.libretube.helpers.ClipboardHelper
 import com.github.libretube.helpers.IntentHelper
+import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.ui.base.BaseActivity
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
 
+/**
+ * PrimeTube: the About screen shows ONLY the developer information by request of
+ * the app owner - all upstream entries (help, donate, website, Piped, translate,
+ * license, third-party credits, device info) have been removed.
+ */
 class AboutActivity : BaseActivity() {
     private lateinit var binding: ActivityAboutBinding
 
-    @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -29,94 +28,59 @@ class AboutActivity : BaseActivity() {
             onBackPressedDispatcher.onBackPressed()
         }
 
-        setupCard(binding.donate, DONATE_URL)
-        setupCard(binding.website, WEBSITE_URL)
-        // PrimeTube: the GitHub card and the developer card point to the PrimeTube repo
-        setupCard(binding.developer, GITHUB_URL)
-        setupCard(binding.piped, PIPED_GITHUB_URL)
-        setupCard(binding.translate, WEBLATE_URL)
-        setupCard(binding.github, GITHUB_URL)
-
-        binding.license.setOnClickListener {
-            showLicense()
+        // the developer card opens the PrimeTube repository
+        binding.developer.setOnClickListener {
+            IntentHelper.openLinkFromHref(this, supportFragmentManager, GITHUB_URL)
         }
-        binding.license.setOnLongClickListener {
-            onLongClick(LICENSE_URL)
+        binding.developer.setOnLongClickListener {
+            onLongClick(GITHUB_URL)
             true
         }
 
-        binding.device.setOnClickListener {
-            showDeviceInfo()
+        // crash report row: only visible when a crash has been logged on this device
+        if (PreferenceHelper.getErrorLog().isBlank()) {
+            binding.crashLog.visibility = View.GONE
         }
-    }
-
-    private fun setupCard(card: MaterialCardView, link: String) {
-        card.setOnClickListener {
-            IntentHelper.openLinkFromHref(this, supportFragmentManager, link)
-        }
-        card.setOnLongClickListener {
-            onLongClick(link)
-            true
+        binding.crashLog.setOnClickListener {
+            showCrashLog()
         }
     }
 
     private fun onLongClick(href: String) {
-        // copy the link to the clipboard
-        ClipboardHelper.save(this, text = href)
-        // show the snackBar with open action
-        Snackbar.make(
-            binding.root,
-            R.string.copied_to_clipboard,
-            Snackbar.LENGTH_LONG
-        )
-            .setAction(R.string.open_copied) {
-                IntentHelper.openLinkFromHref(this, supportFragmentManager, href)
-            }
-            .setAnimationMode(Snackbar.ANIMATION_MODE_FADE)
-            .show()
+        ClipboardHelper.save(this, text = href, notify = true)
     }
 
-    private fun showLicense() {
-        val licenseHtml = assets.open("gpl3.html")
-            .bufferedReader()
-            .use { it.readText() }
-            .parseAsHtml(HtmlCompat.FROM_HTML_SEPARATOR_LINE_BREAK_PARAGRAPH)
+    /**
+     * Let the user copy the last crash log (to share it with the developer) or
+     * open the bug tracker on GitHub.
+     */
+    private fun showCrashLog() {
+        val log = PreferenceHelper.getErrorLog()
+        if (log.isBlank()) return
 
         MaterialAlertDialogBuilder(this)
-            .setPositiveButton(getString(R.string.okay)) { _, _ -> }
-            .setMessage(licenseHtml)
-            .create()
-            .show()
-    }
-
-    private fun showDeviceInfo() {
-        val metrics = Resources.getSystem().displayMetrics
-
-        val text = "Manufacturer: ${Build.MANUFACTURER}\n" +
-                "Board: ${Build.BOARD}\n" +
-                "Arch: ${Build.SUPPORTED_ABIS[0]}\n" +
-                "Android SDK: ${Build.VERSION.SDK_INT}\n" +
-                "OS: Android ${Build.VERSION.RELEASE}\n" +
-                "Display: ${metrics.widthPixels}x${metrics.heightPixels}\n" +
-                "Font scale: ${Resources.getSystem().configuration.fontScale}"
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.device_info)
-            .setMessage(text)
-            .setNegativeButton(R.string.copy_tooltip) { _, _ ->
-                ClipboardHelper.save(this@AboutActivity, text = text)
-            }
+            .setTitle(R.string.prime_crash_log_title)
+            .setMessage(log)
             .setPositiveButton(R.string.okay, null)
+            .setNeutralButton(R.string.prime_copy_crash_log) { _, _ ->
+                ClipboardHelper.save(this, text = log, notify = true)
+            }
+            .setNegativeButton(R.string.prime_report_bug) { _, _ ->
+                IntentHelper.openLinkFromHref(
+                    this,
+                    supportFragmentManager,
+                    ISSUES_URL,
+                    forceDefaultOpen = true
+                )
+            }
             .show()
     }
 
     companion object {
-        const val DONATE_URL = "https://github.com/libre-tube/LibreTube#donate"
-        private const val WEBSITE_URL = "https://libretube.dev"
         // PrimeTube: point all GitHub links to the PrimeTube repository
         const val GITHUB_URL = "https://github.com/khadimsorder2-hue/PrimeTube"
-        private const val PIPED_GITHUB_URL = "https://github.com/TeamPiped/Piped"
-        private const val WEBLATE_URL = "https://hosted.weblate.org/projects/libretube/libretube/"
-        private const val LICENSE_URL = "https://gnu.org/"
+        @Deprecated("PrimeTube: donate links removed from the UI")
+        const val DONATE_URL = "https://github.com/libre-tube/LibreTube#donate"
+        private const val ISSUES_URL = "https://github.com/khadimsorder2-hue/PrimeTube/issues"
     }
 }

@@ -21,92 +21,113 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
-        <!-- PrimeTube: developer card -->
+        <!--
+            PrimeTube: the About page intentionally contains ONLY the developer info.
+            All upstream entries (donate, website, GitHub, Piped, translate, license,
+            device info, help) have been removed by request of the app owner.
+        -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/developer"
-            style="@style/AboutCard">
+            style="@style/AboutCard"
+            app:cardCornerRadius="24dp">
 
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/prime_developer"
-                app:drawableStartCompat="@drawable/ic_github" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingTop="28dp"
+                android:paddingBottom="24dp">
+
+                <FrameLayout
+                    android:layout_width="84dp"
+                    android:layout_height="84dp">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/prime_circle_red" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:text="KI"
+                        android:textColor="@android:color/white"
+                        android:textStyle="bold"
+                        android:textSize="30sp" />
+                </FrameLayout>
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/prime_about_developed_by"
+                    android:textSize="12sp"
+                    android:textAllCaps="true"
+                    android:alpha="0.6" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/prime_about_dev_name"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/prime_about_dev_role"
+                    android:textSize="14sp"
+                    android:alpha="0.7" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/prime_chip_red"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        app:tint="@android:color/white"
+                        android:src="@drawable/ic_github" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/prime_about_repo"
+                        android:textColor="@android:color/white"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+            </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- PrimeTube: last crash report - tap to copy the log or open the bug tracker -->
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/donate"
+            android:id="@+id/crash_log"
             style="@style/AboutCard">
 
             <androidx.appcompat.widget.AppCompatTextView
                 style="@style/AboutItem"
-                android:text="@string/donate"
-                app:drawableStartCompat="@drawable/ic_donate" />
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/website"
-            style="@style/AboutCard">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/website"
-                app:drawableStartCompat="@drawable/ic_region" />
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/github"
-            style="@style/AboutCard">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/github"
-                app:drawableStartCompat="@drawable/ic_github" />
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/piped"
-            style="@style/AboutCard">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/piped"
-                app:drawableStartCompat="@drawable/ic_piped" />
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/translate"
-            style="@style/AboutCard">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/translate"
-                app:drawableStartCompat="@drawable/ic_weblate" />
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/license"
-            style="@style/AboutCard">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/license"
-                app:drawableStartCompat="@drawable/ic_license" />
-
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/device"
-            style="@style/AboutCard">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                style="@style/AboutItem"
-                android:text="@string/device_info"
-                app:drawableStartCompat="@drawable/ic_device" />
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp"
+                android:text="@string/prime_copy_crash_log"
+                app:drawableStartCompat="@drawable/ic_info" />
 
         </com.google.android.material.card.MaterialCardView>
 
