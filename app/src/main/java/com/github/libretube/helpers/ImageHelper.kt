@@ -8,13 +8,10 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
-import android.os.storage.StorageManager
 import android.widget.ImageView
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import coil3.ImageLoader
-import coil3.disk.DiskCache
-import coil3.disk.directory
 import coil3.load
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
@@ -26,21 +23,25 @@ import com.github.libretube.BuildConfig
 import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.extensions.toAndroidUri
 import com.github.libretube.util.DataSaverMode
+import com.github.libretube.util.PrimeImageStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import java.io.File
 import java.nio.file.Path
 
 object ImageHelper {
     private lateinit var imageLoader: ImageLoader
 
-    private val Context.coilFile get() = cacheDir.resolve("coil")
     private const val HTTP_SCHEME = "http"
 
-    // PrimeTube: bounded offline image caches for low-RAM devices (in bytes)
-    private const val LOW_RAM_DISK_CACHE_BYTES = 50L * 1024 * 1024
-    private const val DEFAULT_DISK_CACHE_BYTES = 250L * 1024 * 1024
+    // PrimeTube: bounded caches for low-RAM devices.
+    // The coil disk cache (DiskLruCache) has been REPLACED by PrimeTube's own
+    // PrimeImageStore + a standard OkHttp HTTP cache - DiskLruCache was the source
+    // of the NullPointerException crashes reported from inside coil3.disk.
+    private const val HTTP_CACHE_BYTES = 64L * 1024 * 1024
     private const val LOW_RAM_MEMORY_CACHE_PERCENT = 0.08
     private const val DEFAULT_MEMORY_CACHE_PERCENT = 0.20
 
@@ -64,15 +65,21 @@ object ImageHelper {
             PreferenceHelper.getBoolean(PreferenceKeys.LOW_RAM_MODE, false)
         val smoothUi = !isLowRamDevice && !DataSaverMode.isEnabled(context)
 
+        val client = httpClient
+            .cache(Cache(File(context.cacheDir, "prime_http"), HTTP_CACHE_BYTES))
+            .addInterceptor(PrimeImageStore.TeeInterceptor(context))
+            .build()
+
         imageLoader = ImageLoader.Builder(context)
             .crossfade(smoothUi)
             .components {
                 add(
-                    OkHttpNetworkFetcherFactory(httpClient.build())
+                    OkHttpNetworkFetcherFactory(client)
                 )
             }
             .apply {
-                diskCachePolicy(CachePolicy.ENABLED)
+                // PrimeTube: memory cache only - no coil disk cache anymore.
+                // Persistence comes from the OkHttp HTTP cache + PrimeImageStore.
                 memoryCachePolicy(CachePolicy.ENABLED)
 
                 memoryCache(
@@ -83,38 +90,17 @@ object ImageHelper {
                         )
                         .build()
                 )
-
-                val storageManager = context.getSystemService<StorageManager>()!!
-                val availableCache = storageManager.getCacheQuotaBytes(
-                    storageManager.getUuidForPath(context.coilFile)
-                )
-                val cacheCap = if (isLowRamDevice) {
-                    LOW_RAM_DISK_CACHE_BYTES
-                } else {
-                    DEFAULT_DISK_CACHE_BYTES
-                }
-                val diskCache = DiskCache.Builder()
-                    .directory(context.coilFile)
-                    // only use a certain percentage of the available cache size for images
-                    .maxSizeBytes(minOf(availableCache, cacheCap))
-                    .build()
-                diskCache(diskCache)
             }
             .build()
     }
 
     /**
      * Checks if the corresponding image for the given key (e.g. a url) is cached.
-     * PrimeTube: hardening - never crash the caller if the disk cache is in a bad state
-     * (there have been NullPointerException reports from inside coil's DiskLruCache).
+     * PrimeTube: uses our own PrimeImageStore instead of coil's DiskLruCache -
+     * plain file existence check, cannot throw.
      */
-    private fun isCached(key: String): Boolean {
-        return runCatching {
-            val cacheSnapshot = imageLoader.diskCache?.openSnapshot(key)
-            val isCacheHit = cacheSnapshot?.data?.toFile()?.exists()
-            cacheSnapshot?.close()
-            isCacheHit ?: false
-        }.getOrDefault(false)
+    private fun isCached(context: Context, key: String): Boolean {
+        return PrimeImageStore.isCached(context, key)
     }
 
     /**
@@ -132,7 +118,7 @@ object ImageHelper {
         val canLoad = runCatching {
             !DataSaverMode.isEnabled(target.context) ||
                 !urlToLoad.startsWith(HTTP_SCHEME) ||
-                isCached(urlToLoad)
+                isCached(target.context, urlToLoad)
         }.getOrDefault(true)
         if (!canLoad) return
 

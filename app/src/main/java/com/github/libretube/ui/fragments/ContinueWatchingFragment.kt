@@ -52,10 +52,15 @@ class ContinueWatchingFragment : DynamicLayoutManagerFragment(R.layout.fragment_
         binding.continueRecView.adapter = continueWatchingAdapter
 
         viewModel.videos.observe(viewLifecycleOwner) { videos ->
-            binding.progress.isGone = true
-            binding.continueEmpty.isGone = videos.isNotEmpty()
-            binding.continueRecView.isVisible = videos.isNotEmpty()
-            continueWatchingAdapter.submitList(videos)
+            // PrimeTube: a failure while binding the list (e.g. a bad image cache state)
+            // must never crash the whole app - this observer runs on every fragment
+            // start, including right after tapping a video to play
+            runCatching {
+                binding.progress.isGone = true
+                binding.continueEmpty.isGone = videos.isNotEmpty()
+                binding.continueRecView.isVisible = videos.isNotEmpty()
+                continueWatchingAdapter.submitList(videos)
+            }
         }
 
         binding.continueRecView.addOnBottomReachedListener {

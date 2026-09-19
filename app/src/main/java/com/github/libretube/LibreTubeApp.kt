@@ -11,6 +11,7 @@ import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.helpers.ProxyHelper
 import com.github.libretube.helpers.ShortcutHelper
 import com.github.libretube.util.ExceptionHandler
+import com.github.libretube.util.PrimeImageStore
 
 class LibreTubeApp : Application() {
     override fun onCreate() {
@@ -32,6 +33,11 @@ class LibreTubeApp : Application() {
          * Set the api and the auth api url
          */
         ImageHelper.initializeImageLoader(this)
+
+        /**
+         * PrimeTube: keep our own image store bounded (background thread, never throws)
+         */
+        PrimeImageStore.pruneAsync(this)
 
         /**
          * Initialize the notification listener in the background

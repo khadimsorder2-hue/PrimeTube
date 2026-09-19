@@ -147,12 +147,17 @@ class WatchHistoryFragment : DynamicLayoutManagerFragment(R.layout.fragment_watc
         }
 
         viewModel.filteredWatchHistory.observe(viewLifecycleOwner) { history ->
-            binding.historyEmpty.isGone = history.isNotEmpty()
-            binding.watchHistoryRecView.isVisible = history.isNotEmpty()
-            binding.clear.isVisible = history.isNotEmpty()
-            binding.playAll.isVisible = history.isNotEmpty()
+            // PrimeTube: a failure while binding the list (e.g. a bad image cache state)
+            // must never crash the whole app - this was the source of "watch history
+            // click opens crash" reports
+            runCatching {
+                binding.historyEmpty.isGone = history.isNotEmpty()
+                binding.watchHistoryRecView.isVisible = history.isNotEmpty()
+                binding.clear.isVisible = history.isNotEmpty()
+                binding.playAll.isVisible = history.isNotEmpty()
 
-            watchHistoryAdapter.submitList(history)
+                watchHistoryAdapter.submitList(history)
+            }
         }
 
         viewModel.fetchNextPage()
