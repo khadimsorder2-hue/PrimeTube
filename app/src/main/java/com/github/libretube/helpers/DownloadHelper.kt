@@ -19,6 +19,7 @@ import com.github.libretube.extensions.toID
 import com.github.libretube.extensions.toastFromMainDispatcher
 import com.github.libretube.parcelable.DownloadData
 import com.github.libretube.services.DownloadService
+import com.github.libretube.services.StorageDownloadService
 import com.github.libretube.ui.dialogs.DownloadDialog
 import com.github.libretube.ui.dialogs.DownloadPlaylistDialog
 import com.github.libretube.ui.dialogs.ShareDialog
@@ -46,6 +47,7 @@ object DownloadHelper {
     // PrimeTube: special values of the download handoff preference
     const val PROVIDER_ASK = "ask"
     const val PROVIDER_INTERNAL = "internal"
+    const val PROVIDER_STORAGE = "storage"
 
     fun getDownloadDir(context: Context, path: String): Path {
         val storageDir =
@@ -82,6 +84,9 @@ object DownloadHelper {
         when {
             provider.isBlank() || provider == PROVIDER_INTERNAL ->
                 showInAppDownloadDialog(fragmentManager, videoId)
+
+            provider == PROVIDER_STORAGE ->
+                StorageDownloadService.enqueue(context, videoId)
 
             provider == PROVIDER_ASK ->
                 showDownloadChoiceDialog(
@@ -127,6 +132,7 @@ object DownloadHelper {
     ) {
         val options = arrayOf(
             context.getString(R.string.download_with_seal),
+            context.getString(R.string.save_to_storage),
             context.getString(R.string.download_in_app)
         )
         MaterialAlertDialogBuilder(context)
@@ -134,6 +140,11 @@ object DownloadHelper {
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> openInExternalDownloader(context, url)
+
+                    1 -> StorageDownloadService.enqueue(
+                        context,
+                        Regex("v=([A-Za-z0-9_-]{11})").find(url)?.groupValues?.get(1) ?: url
+                    )
 
                     else -> onInAppDownload()
                 }

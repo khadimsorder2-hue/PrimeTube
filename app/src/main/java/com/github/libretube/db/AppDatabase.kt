@@ -47,10 +47,11 @@ import com.github.libretube.db.obj.WatchPosition
         DownloadSponsorBlockSegment::class,
         DownloadPlaylist::class,
         DownloadPlaylistVideosCrossRef::class,
+        com.github.libretube.db.obj.SavedDownload::class,
         SubscriptionGroup::class,
         SubscriptionsFeedItem::class
     ],
-    version = 25,
+    version = 26,
     autoMigrations = [
         AutoMigration(from = 7, to = 8),
         AutoMigration(from = 8, to = 9),
@@ -105,6 +106,11 @@ abstract class AppDatabase : RoomDatabase() {
      * Downloads
      */
     abstract fun downloadDao(): DownloadDao
+
+    /**
+     * PrimeTube: history of videos saved as MP4 files to user storage
+     */
+    abstract fun savedDownloadDao(): com.github.libretube.db.dao.SavedDownloadDao
 
     /**
      * Subscription groups

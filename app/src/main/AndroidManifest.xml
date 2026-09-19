@@ -386,6 +386,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- PrimeTube: saves videos as normal MP4 files to user storage (phone or SD card) -->
+        <service
+            android:name=".services.StorageDownloadService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <service
             android:name=".services.PlaylistDownloadEnqueueService"
             android:enabled="true"

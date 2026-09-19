@@ -5,7 +5,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
+import androidx.core.net.toUri
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import com.github.libretube.BuildConfig
@@ -20,6 +22,15 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Locale
 
 class GeneralSettings : BasePreferenceFragment() {
+
+    // PrimeTube: SAF folder picker for the "Save to storage (MP4)" downloads
+    private val mp4FolderPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            saveMp4DownloadFolder(uri)
+        }
+    }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.general_settings, rootKey)
@@ -79,6 +90,14 @@ class GeneralSettings : BasePreferenceFragment() {
             true
         }
 
+        // PrimeTube: SAF folder where "Save to storage (MP4)" files are written
+        val mp4Folder = findPreference<Preference>(PreferenceKeys.MP4_DOWNLOAD_FOLDER)
+        mp4Folder?.summary = getMp4FolderSummary()
+        mp4Folder?.setOnPreferenceClickListener {
+            mp4FolderPicker.launch(null)
+            true
+        }
+
         // PrimeTube: open Seal so the download folder (phone or SD card) and the
         // Seal download history can be managed where downloads actually happen
         val openSeal = findPreference<Preference>("open_seal")
@@ -99,6 +118,35 @@ class GeneralSettings : BasePreferenceFragment() {
         if (preference.key == "language" && LocaleHelper.isPerAppLocaleSettingSupported()) return
 
         super.onDisplayPreferenceDialog(preference)
+    }
+
+    /**
+     * PrimeTube: persist the picked SAF tree URI and show the folder name in the summary.
+     */
+    private fun saveMp4DownloadFolder(uri: Uri) {
+        runCatching {
+            context?.contentResolver?.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        PreferenceHelper.putString(PreferenceKeys.MP4_DOWNLOAD_FOLDER, uri.toString())
+
+        findPreference<Preference>(PreferenceKeys.MP4_DOWNLOAD_FOLDER)?.summary =
+            getMp4FolderSummary()
+    }
+
+    private fun getMp4FolderSummary(): CharSequence {
+        val saved = PreferenceHelper.getString(PreferenceKeys.MP4_DOWNLOAD_FOLDER, "")
+        if (saved.isBlank()) return getText(R.string.mp4_download_folder_summary)
+
+        val folderName = runCatching {
+            androidx.documentfile.provider.DocumentFile.fromTreeUri(
+                requireContext(), saved.toUri()
+            )?.name
+        }.getOrNull()
+
+        return getString(R.string.mp4_folder_set, folderName ?: saved)
     }
 
     private fun showResetDialog() {

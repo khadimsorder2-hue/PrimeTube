@@ -58,6 +58,19 @@ object DatabaseHolder {
         }
     }
 
+    // PrimeTube: saved MP4 downloads history (version 26)
+    private val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `savedDownload` (`videoId` TEXT NOT NULL, " +
+                    "`title` TEXT NOT NULL, `uploader` TEXT NOT NULL, `uri` TEXT NOT NULL, " +
+                    "`fileName` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, " +
+                    "`duration` INTEGER NOT NULL, `savedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`videoId`))"
+            )
+        }
+    }
+
     private val MIGRATION_21_22 = object : Migration(21, 22) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE TABLE 'downloadSponsorBlockSegment' (" +
@@ -98,7 +111,8 @@ object DatabaseHolder {
                 MIGRATION_15_16,
                 MIGRATION_17_18,
                 MIGRATION_21_22,
-                MIGRATION_22_23
+                MIGRATION_22_23,
+                MIGRATION_25_26
             )
             .build()
     }

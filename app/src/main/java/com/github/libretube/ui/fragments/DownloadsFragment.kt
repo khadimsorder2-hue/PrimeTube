@@ -67,7 +67,8 @@ import kotlin.io.path.fileSize
 enum class DownloadTab {
     VIDEO,
     AUDIO,
-    PLAYLIST
+    PLAYLIST,
+    FILES
 }
 
 enum class DownloadSortingOrder(@StringRes val stringId: Int) {
@@ -94,6 +95,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_downloads) {
                 DownloadTab.VIDEO.ordinal -> getString(R.string.video)
                 DownloadTab.AUDIO.ordinal -> getString(R.string.audio)
                 DownloadTab.PLAYLIST.ordinal -> getString(R.string.playlists)
+                DownloadTab.FILES.ordinal -> getString(R.string.saved_files)
                 else -> throw IllegalArgumentException()
             }
         }.attach()
@@ -117,6 +119,11 @@ class DownloadsFragmentAdapter(fragment: Fragment) : FragmentStateAdapter(fragme
     override fun createFragment(position: Int): Fragment {
         if (position == DownloadTab.PLAYLIST.ordinal) {
             return PlaylistDownloadsFragmentPage()
+        }
+
+        // PrimeTube: history of videos saved as MP4 files to user storage
+        if (position == DownloadTab.FILES.ordinal) {
+            return SavedFilesFragmentPage()
         }
 
         return DownloadsFragmentPage().apply {

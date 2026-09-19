@@ -123,6 +123,9 @@ object PreferenceKeys {
      * provider is configured. Seal is a popular open-source yt-dlp frontend.
      */
     const val DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER = "com.junkfood.seal"
+
+    // PrimeTube: SAF folder where "Save to storage" downloads are written as MP4 files
+    const val MP4_DOWNLOAD_FOLDER = "mp4_download_folder"
     const val LOW_RAM_MODE = "low_ram_mode"
     const val FULL_LOCAL_MODE = "full_local_mode"
     const val LOCAL_RYD = "local_return_youtube_dislikes"

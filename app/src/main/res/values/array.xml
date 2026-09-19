@@ -5,12 +5,14 @@
         <item>@string/download_handoff_seal</item>
         <item>@string/download_handoff_ask</item>
         <item>@string/download_handoff_internal</item>
+        <item>@string/save_to_storage</item>
     </string-array>
 
     <string-array name="download_handoff_values">
         <item>com.junkfood.seal</item>
         <item>ask</item>
         <item>internal</item>
+        <item>storage</item>
     </string-array>
 
     <string-array name="themes">

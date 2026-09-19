@@ -57,6 +57,13 @@
             android:summary="@string/download_handoff_summary"
             android:title="@string/download_handoff" />
 
+        <!-- PrimeTube: SAF folder for "Save to storage (MP4)" downloads -->
+        <Preference
+            android:icon="@drawable/ic_download_folder"
+            android:key="mp4_download_folder"
+            android:summary="@string/mp4_download_folder_summary"
+            android:title="@string/mp4_download_folder" />
+
         <Preference
             android:icon="@drawable/ic_open"
             android:key="open_seal"
