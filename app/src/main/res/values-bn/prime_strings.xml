@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: Bangla strings for the new player controls -->
+<resources>
+    <string name="tooltip_previous">আগেরটা</string>
+    <string name="tooltip_next">পরেরটা</string>
+    <string name="prime_speed_1x">1x</string>
+    <string name="prime_speed_2x">2x</string>
+    <string name="prime_gesture_brightness">উজ্জ্বলতা %1$d%%</string>
+    <string name="prime_gesture_volume">ভলিউম %1$d%%</string>
+</resources>
