@@ -14,6 +14,7 @@ import com.github.libretube.api.TrendingCategory
 import com.github.libretube.api.obj.StreamItem
 import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.databinding.FragmentHomeBinding
+import com.github.libretube.helpers.PerformanceHelper
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.ui.activities.SettingsActivity
 import com.github.libretube.ui.adapters.VideoCardsAdapter
@@ -56,6 +57,17 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         binding.watchingRV.adapter = watchingAdapter
         binding.trendingRV.adapter = feedAdapter
+
+        // PrimeTube: trim RecyclerView animations and caches depending on the RAM profile
+        if (PerformanceHelper.isLowRamDevice()) {
+            // change animations cause relayouts and flickering during feed updates
+            binding.trendingRV.itemAnimator = null
+            binding.watchingRV.itemAnimator = null
+        } else {
+            // keep more bound views around for smoother fast scrolling
+            binding.trendingRV.setItemViewCacheSize(8)
+            binding.watchingRV.setItemViewCacheSize(4)
+        }
 
         with(homeViewModel) {
             trending.observe(viewLifecycleOwner, ::showTrending)

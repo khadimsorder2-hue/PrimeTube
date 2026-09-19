@@ -57,6 +57,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 object PlayerHelper {
@@ -65,6 +66,11 @@ object PlayerHelper {
     const val SPONSOR_HIGHLIGHT_CATEGORY = "poi_highlight"
     const val ROLE_FLAG_AUTO_GEN_SUBTITLE = C.ROLE_FLAG_SUPPLEMENTARY
     private const val MINIMUM_BUFFER_DURATION = 1000 * 10 // exo default is 50s
+
+    // PrimeTube: trimmed buffer durations to keep the player's RAM footprint small
+    private const val LOW_RAM_MAX_BUFFER_DURATION = 1000 * 20
+    private const val LOW_RAM_BACK_BUFFER_DURATION = 1000 * 10
+    private const val DEFAULT_BACK_BUFFER_DURATION = 1000 * 30
     const val WATCH_POSITION_TIMER_DELAY_MS = 1000L
 
     /**
@@ -516,15 +522,33 @@ object PlayerHelper {
      */
     @OptIn(androidx.media3.common.util.UnstableApi::class)
     fun getLoadControl(): LoadControl {
+        // PrimeTube: trim the buffers. The stock values (50s forward buffer, 3min back
+        // buffer) keep tens of megabytes of compressed media in RAM which caused heavy
+        // memory pressure and device-wide freezes on low-RAM devices, especially in PiP.
+        val lowRam = PerformanceHelper.isLowRamDevice()
+
+        val forwardBufferDuration = if (lowRam) {
+            min(bufferingGoal, LOW_RAM_MAX_BUFFER_DURATION)
+        } else {
+            max(bufferingGoal, MINIMUM_BUFFER_DURATION)
+        }
+
+        val backBufferDuration = if (lowRam) {
+            LOW_RAM_BACK_BUFFER_DURATION
+        } else {
+            DEFAULT_BACK_BUFFER_DURATION
+        }
+
         return DefaultLoadControl.Builder()
-            // cache the last three minutes
-            .setBackBuffer(1000 * 60 * 3, true)
+            .setBackBuffer(backBufferDuration, true)
             .setBufferDurationsMs(
                 MINIMUM_BUFFER_DURATION,
-                max(bufferingGoal, MINIMUM_BUFFER_DURATION),
+                forwardBufferDuration,
                 DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
                 DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
             )
+            // prefer starting playback sooner over filling the whole buffer
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
     }
 
