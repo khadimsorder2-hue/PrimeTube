@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: monochrome (themed) launcher icon - play triangle -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M29,34 L29,74 Q29,80 34.3,77.2 L73.7,56.8 Q79,54 73.7,51.2 L34.3,30.8 Q29,28 29,34 Z"/>
+</vector>
