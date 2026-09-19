@@ -131,6 +131,8 @@ class DownloadsAdapter(
                             audioOnlyPlayerRequested = true
                         )
                     }
+                    // PrimeTube: the FILES tab uses SavedFilesAdapter, not this one
+                    DownloadTab.FILES -> Unit
                 }
             }
 

@@ -55,5 +55,8 @@ fun List<DownloadWithItems>.filterByTab(tab: DownloadTab) = filter { dl ->
         }
 
         DownloadTab.PLAYLIST -> throw IllegalArgumentException("not applicable for playlist tab, playlistId must be passed")
+
+        // PrimeTube: the FILES tab lists saved MP4 files, not offline downloads
+        DownloadTab.FILES -> false
     }
 }

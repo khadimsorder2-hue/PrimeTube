@@ -452,7 +452,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         viewModel.segments.observe(viewLifecycleOwner) { segments ->
             binding.descriptionLayout.setSegments(segments)
             playerControlsBinding.exoProgress.setSegments(segments)
-            playerControlsBinding.sbToggle.isVisible = segments.isNotEmpty()
             getHighlight(segments)?.let {
                 lifecycleScope.launch(Dispatchers.IO) { initializeHighlight(it) }
             }
@@ -665,9 +664,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
     // actions that don't depend on video information
     private fun initializeOnClickActions() {
         binding.closeImageView.setOnClickListener {
-            killPlayerFragment()
-        }
-        playerControlsBinding.closeImageButton.setOnClickListener {
             killPlayerFragment()
         }
 
@@ -1061,7 +1057,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
     private fun setPlayerDefaults() {
         // reset the player view
         playerControlsBinding.exoProgress.clearSegments()
-        playerControlsBinding.sbToggle.isGone = true
 
         // reset the comments to become reloaded later
         commentsViewModel.reset()
