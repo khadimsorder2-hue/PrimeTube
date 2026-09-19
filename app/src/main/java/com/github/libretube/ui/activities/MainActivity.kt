@@ -264,26 +264,30 @@ class MainActivity : AbstractPlayerHostActivity() {
         subscriptionsViewModel.fetchSubscriptions(this)
 
         subscriptionsViewModel.videoFeed.observe(this) { feed ->
-            val lastCheckedFeedTime = PreferenceHelper.getLastCheckedFeedTime(seenByUser = true)
-            val lastSeenVideoIndex = feed.orEmpty()
-                .filter { !it.isUpcoming }
-                .indexOfFirst { it.uploaded <= lastCheckedFeedTime }
-            if (lastSeenVideoIndex < 1) return@observe
+            // PrimeTube: hardening - a crash inside this observer (e.g. a bad cache state
+            // during image loading) must never bring down the whole app on startup
+            runCatching {
+                val lastCheckedFeedTime = PreferenceHelper.getLastCheckedFeedTime(seenByUser = true)
+                val lastSeenVideoIndex = feed.orEmpty()
+                    .filter { !it.isUpcoming }
+                    .indexOfFirst { it.uploaded <= lastCheckedFeedTime }
+                if (lastSeenVideoIndex < 1) return@observe
 
-            // PrimeTube: the subscriptions item may have been replaced in the bottom
-            // navigation - only badge it when it is still part of the menu
-            if (binding.bottomNav.menu.findItem(R.id.subscriptionsFragment) == null) return@observe
+                // PrimeTube: the subscriptions item may have been replaced in the bottom
+                // navigation - only badge it when it is still part of the menu
+                if (binding.bottomNav.menu.findItem(R.id.subscriptionsFragment) == null) return@observe
 
-            binding.bottomNav.getOrCreateBadge(R.id.subscriptionsFragment).apply {
-                number = lastSeenVideoIndex
-                backgroundColor = ThemeHelper.getThemeColor(
-                    this@MainActivity,
-                    androidx.appcompat.R.attr.colorPrimary
-                )
-                badgeTextColor = ThemeHelper.getThemeColor(
-                    this@MainActivity,
-                    com.google.android.material.R.attr.colorOnPrimary
-                )
+                binding.bottomNav.getOrCreateBadge(R.id.subscriptionsFragment).apply {
+                    number = lastSeenVideoIndex
+                    backgroundColor = ThemeHelper.getThemeColor(
+                        this@MainActivity,
+                        androidx.appcompat.R.attr.colorPrimary
+                    )
+                    badgeTextColor = ThemeHelper.getThemeColor(
+                        this@MainActivity,
+                        com.google.android.material.R.attr.colorOnPrimary
+                    )
+                }
             }
         }
     }

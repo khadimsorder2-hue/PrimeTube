@@ -105,13 +105,16 @@ object ImageHelper {
 
     /**
      * Checks if the corresponding image for the given key (e.g. a url) is cached.
+     * PrimeTube: hardening - never crash the caller if the disk cache is in a bad state
+     * (there have been NullPointerException reports from inside coil's DiskLruCache).
      */
     private fun isCached(key: String): Boolean {
-        val cacheSnapshot = imageLoader.diskCache?.openSnapshot(key)
-        val isCacheHit = cacheSnapshot?.data?.toFile()?.exists()
-        cacheSnapshot?.close()
-
-        return isCacheHit ?: false
+        return runCatching {
+            val cacheSnapshot = imageLoader.diskCache?.openSnapshot(key)
+            val isCacheHit = cacheSnapshot?.data?.toFile()?.exists()
+            cacheSnapshot?.close()
+            isCacheHit ?: false
+        }.getOrDefault(false)
     }
 
     /**
@@ -126,17 +129,22 @@ object ImageHelper {
         val urlToLoad = ProxyHelper.rewriteUrlUsingProxyPreference(url)
 
         // only load online images if the data saver mode is disabled
-        if (DataSaverMode.isEnabled(target.context)) {
-            if (urlToLoad.startsWith(HTTP_SCHEME) && !isCached(urlToLoad)) return
-        }
+        val canLoad = runCatching {
+            !DataSaverMode.isEnabled(target.context) ||
+                !urlToLoad.startsWith(HTTP_SCHEME) ||
+                isCached(urlToLoad)
+        }.getOrDefault(true)
+        if (!canLoad) return
 
-        target.load(urlToLoad) {
-            listener(
-                onSuccess = { _, _ ->
-                    // set the background to white for transparent images
-                    if (whiteBackground) target.setBackgroundColor(Color.WHITE)
-                }
-            )
+        runCatching {
+            target.load(urlToLoad) {
+                listener(
+                    onSuccess = { _, _ ->
+                        // set the background to white for transparent images
+                        if (whiteBackground) target.setBackgroundColor(Color.WHITE)
+                    }
+                )
+            }
         }
     }
 
