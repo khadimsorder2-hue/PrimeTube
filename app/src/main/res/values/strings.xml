@@ -594,6 +594,13 @@
     <string name="tooltip_fullscreen">Fullscreen</string>
     <string name="tooltip_close">Close</string>
     <string name="tooltip_play">Play</string>
+    <!-- PrimeTube: mini player controls -->
+    <string name="tooltip_previous">Previous</string>
+    <string name="tooltip_next">Next</string>
+    <string name="prime_speed_1x">1x</string>
+    <string name="prime_speed_2x">2x</string>
+    <string name="prime_gesture_brightness">Brightness %1$d%%</string>
+    <string name="prime_gesture_volume">Volume %1$d%%</string>
     <string name="tooltip_filter">Filter</string>
     <string name="tooltip_edit_groups">Edit groups</string>
     <string name="tooltip_create_playlist">Create playlist</string>

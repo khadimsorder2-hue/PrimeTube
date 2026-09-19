@@ -216,8 +216,92 @@
         android:paddingVertical="15dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/play_imageView"
-        app:layout_constraintEnd_toStartOf="@+id/play_imageView"
+        app:layout_constraintEnd_toStartOf="@+id/mini_prev"
         app:layout_constraintStart_toEndOf="@+id/player"
         app:layout_constraintTop_toTopOf="@+id/play_imageView" />
+
+    <!-- PrimeTube: mini player full controls (visible only in the collapsed state) -->
+
+    <ImageView
+        android:id="@+id/mini_prev"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:alpha="0"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="8dp"
+        android:src="@drawable/ic_prev"
+        android:tooltipText="@string/tooltip_previous"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/play_imageView"
+        app:layout_constraintEnd_toStartOf="@+id/play_imageView"
+        app:layout_constraintTop_toTopOf="@+id/play_imageView" />
+
+    <ImageView
+        android:id="@+id/mini_next"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:alpha="0"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="8dp"
+        android:src="@drawable/ic_next"
+        android:tooltipText="@string/tooltip_next"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/play_imageView"
+        app:layout_constraintEnd_toStartOf="@+id/mini_speed"
+        app:layout_constraintStart_toEndOf="@+id/play_imageView"
+        app:layout_constraintTop_toTopOf="@+id/play_imageView" />
+
+    <TextView
+        android:id="@+id/mini_speed"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:alpha="0"
+        android:background="@drawable/prime_gesture_pill"
+        android:fontFamily="sans-serif-medium"
+        android:paddingHorizontal="9dp"
+        android:paddingVertical="3dp"
+        android:text="@string/prime_speed_1x"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/play_imageView"
+        app:layout_constraintEnd_toStartOf="@+id/close_imageView"
+        app:layout_constraintTop_toTopOf="@+id/play_imageView" />
+
+    <SeekBar
+        android:id="@+id/mini_seek"
+        android:layout_width="0dp"
+        android:layout_height="18dp"
+        android:alpha="0"
+        android:background="@null"
+        android:max="1000"
+        android:maxHeight="3dp"
+        android:minHeight="0dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:progressDrawable="@drawable/prime_mini_seekbar"
+        android:splitTrack="false"
+        android:thumb="@drawable/prime_mini_seek_thumb"
+        android:thumbOffset="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/main_container"
+        app:layout_constraintEnd_toEndOf="@+id/main_container"
+        app:layout_constraintStart_toStartOf="@+id/main_container" />
+
+    <TextView
+        android:id="@+id/mini_gesture_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:alpha="0"
+        android:background="@drawable/prime_gesture_pill"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="6dp"
+        android:textColor="@android:color/white"
+        android:textSize="13sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/player"
+        app:layout_constraintEnd_toEndOf="@+id/player"
+        app:layout_constraintStart_toStartOf="@+id/player"
+        app:layout_constraintTop_toTopOf="@+id/player" />
 
 </com.github.libretube.ui.views.SingleViewTouchableMotionLayout>

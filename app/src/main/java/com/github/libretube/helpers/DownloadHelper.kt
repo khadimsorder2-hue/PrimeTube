@@ -78,11 +78,14 @@ object DownloadHelper {
      *   Downloads page in the bottom navigation)
      */
     fun startDownloadDialog(context: Context, fragmentManager: FragmentManager, videoId: String) {
-        val provider =
-            PreferenceHelper.getString(PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER, "")
+        // PrimeTube: Seal is the default handoff target (matches the settings default)
+        val provider = PreferenceHelper.getString(
+            PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER,
+            PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER
+        )
 
         when {
-            provider.isBlank() || provider == PROVIDER_INTERNAL ->
+            provider == PROVIDER_INTERNAL ->
                 showInAppDownloadDialog(fragmentManager, videoId)
 
             provider == PROVIDER_STORAGE ->
@@ -97,6 +100,7 @@ object DownloadHelper {
                 }
 
             else ->
+                // Seal (default) or any custom downloader package
                 openInExternalDownloader(
                     context,
                     "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
@@ -156,9 +160,11 @@ object DownloadHelper {
     /**
      * PrimeTube: hand a media URL to the configured external downloader (e.g. Seal).
      *
-     * Tries in order until one succeeds:
-     * 1. ACTION_VIEW with the URL to the provider package
-     * 2. ACTION_SEND text/plain with the URL to the provider package
+     * Tries in order until one succeeds - a failure at any step (including
+     * ActivityNotFoundException at start time) falls through to the next one:
+     * 1. ACTION_SEND text/plain with the URL to the provider package (Seal's
+     *    documented integration)
+     * 2. ACTION_VIEW with the URL to the provider package
      * 3. A generic Android share chooser as last-resort fallback
      */
     fun openInExternalDownloader(context: Context, url: String) {
@@ -169,21 +175,21 @@ object DownloadHelper {
             ?: PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER
         val packageManager = context.packageManager
 
-        val viewIntent = Intent(Intent.ACTION_VIEW)
-            .setPackage(provider)
-            .setDataAndType(url.toUri(), VIDEO_MIMETYPE)
-        if (viewIntent.resolveActivity(packageManager) != null) {
-            runCatching { context.startActivity(viewIntent) }
-            return
-        }
-
         val sendIntent = Intent(Intent.ACTION_SEND)
             .setPackage(provider)
             .setType("text/plain")
             .putExtra(Intent.EXTRA_TEXT, url)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (sendIntent.resolveActivity(packageManager) != null) {
-            runCatching { context.startActivity(sendIntent) }
-            return
+            if (runCatching { context.startActivity(sendIntent) }.isSuccess) return
+        }
+
+        val viewIntent = Intent(Intent.ACTION_VIEW)
+            .setPackage(provider)
+            .setDataAndType(url.toUri(), VIDEO_MIMETYPE)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (viewIntent.resolveActivity(packageManager) != null) {
+            if (runCatching { context.startActivity(viewIntent) }.isSuccess) return
         }
 
         val chooserIntent = Intent.createChooser(
@@ -191,7 +197,7 @@ object DownloadHelper {
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_TEXT, url),
             null
-        )
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(chooserIntent) }
     }
 
@@ -202,12 +208,15 @@ object DownloadHelper {
         playlistName: String,
         playlistType: PlaylistType
     ) {
-        val provider =
-            PreferenceHelper.getString(PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER, "")
+        // PrimeTube: Seal is the default handoff target (matches the settings default)
+        val provider = PreferenceHelper.getString(
+            PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER,
+            PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER
+        )
         val playlistUrl = "${ShareDialog.YOUTUBE_FRONTEND_URL}/playlist?list=$playlistId"
 
         when {
-            provider.isBlank() || provider == PROVIDER_INTERNAL ->
+            provider == PROVIDER_INTERNAL ->
                 showInAppDownloadPlaylistDialog(
                     fragmentManager,
                     playlistId,

@@ -10,18 +10,24 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.session.PlaybackState
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
 import android.view.WindowManager
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -58,6 +64,7 @@ import com.github.libretube.api.obj.Streams
 import com.github.libretube.compat.PictureInPictureCompat
 import com.github.libretube.compat.PictureInPictureParamsCompat
 import com.github.libretube.constants.IntentData
+import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.databinding.FragmentPlayerBinding
 import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.enums.FileType
@@ -73,10 +80,13 @@ import com.github.libretube.extensions.togglePlayPauseState
 import com.github.libretube.extensions.updateIfChanged
 import com.github.libretube.helpers.BackgroundHelper
 import com.github.libretube.helpers.DownloadHelper
+import com.github.libretube.helpers.AudioHelper
+import com.github.libretube.helpers.BrightnessHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PlayerHelper.getCurrentSegment
+import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.helpers.ThemeHelper
 import com.github.libretube.helpers.WindowHelper
 import com.github.libretube.obj.ShareData
@@ -114,7 +124,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.io.path.exists
+import kotlin.math.abs
 import kotlin.math.absoluteValue
 
 
@@ -220,6 +232,32 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     private var bufferingTimeoutTask: Runnable? = null
 
+    // region PrimeTube: mini player full controls
+    private val MINI_SEEK_MAX = 1000
+    private var miniProgressHandler: Handler? = null
+    private var miniProgressRunnable: Runnable? = null
+    private var miniSeekDragging = false
+    private var miniBrightnessHelper: BrightnessHelper? = null
+    private var miniAudioHelper: AudioHelper? = null
+    private var miniGestureActive = false
+    private var miniGestureIsBrightness = false
+    private var miniGestureStartY = 0f
+    private var miniGestureStartValue = 0f
+    private var miniPreviewPopup: PopupWindow? = null
+    private var miniPreviewImageView: ImageView? = null
+    private var miniPreviewTextView: TextView? = null
+    private var miniTimeFrameReceiver: TimeFrameReceiver? = null
+    private var miniTimeFrameReceiverLoading = false
+    private var miniFrameLoading = false
+    private var miniLastPreviewRequestMs = -1L
+    private val miniGestureIndicatorHideTask = Runnable {
+        val indicator = _binding?.miniGestureIndicator ?: return@Runnable
+        indicator.animate().alpha(0f).setDuration(200).withEndAction {
+            if (_binding != null) indicator.isGone = true
+        }.start()
+    }
+    // endregion
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             // PrimeTube: PiP has been removed - nothing PiP related runs on play state changes
@@ -242,6 +280,11 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
                 ) && _binding != null
             ) {
                 updatePlayPauseButton()
+            }
+
+            // PrimeTube: keep the mini player speed toggle label in sync
+            if (events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED) && _binding != null) {
+                updateMiniSpeedLabel()
             }
         }
 
@@ -516,6 +559,15 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
             // if the player is minimized, the fragment behind the player should handle the event
             onBackPressedCallback.isEnabled = isMiniPlayerVisible != true
+
+            // PrimeTube: run the mini player progress updates only while visible
+            if (isMiniPlayerVisible) {
+                startMiniProgressUpdates()
+                updateMiniSpeedLabel()
+            } else {
+                stopMiniProgressUpdates()
+                hideMiniPreview()
+            }
         }
 
         toggleVideoInfoVisibility(false)
@@ -651,8 +703,396 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             )
     }
 
+    // region PrimeTube: mini player full controls
+
+    /**
+     * Wire up the additional mini player controls: previous/next, 2x speed toggle,
+     * tap-to-seek with thumbnail preview, and volume/brightness swipe gestures on
+     * the collapsed thumbnail.
+     */
+    private fun initializeMiniPlayerControls() {
+        binding.miniPrev.setOnClickListener {
+            runCatching {
+                PlayingQueue.getPrev()?.let { prev -> playNextVideo(prev) }
+            }
+        }
+
+        binding.miniNext.setOnClickListener {
+            runCatching {
+                PlayingQueue.getNext()?.let { next -> playNextVideo(next) }
+            }
+        }
+
+        binding.miniSpeed.setOnClickListener {
+            runCatching { togglePlaybackSpeed2x() }
+        }
+
+        // tapping the title expands the player again
+        binding.titleTextView.setOnClickListener {
+            runCatching { binding.playerMotionLayout.transitionToStart() }
+        }
+
+        setupMiniSeek()
+        setupMiniGesture()
+    }
+
+    /**
+     * PrimeTube: shared 1x <-> 2x speed toggle used by both the mini player pill
+     * and the fullscreen bottom bar button.
+     */
+    private fun togglePlaybackSpeed2x() {
+        if (!::playerController.isInitialized) return
+        val isCurrently2x = playerController.playbackParameters.speed >= 1.95f
+        val targetSpeed = if (isCurrently2x) {
+            PreferenceHelper.getString(PreferenceKeys.PLAYBACK_SPEED, "1")
+                .toFloatOrNull() ?: 1f
+        } else {
+            2f
+        }
+        playerController.setPlaybackSpeed(targetSpeed)
+        updateMiniSpeedLabel()
+    }
+
+    private fun updateMiniSpeedLabel() {
+        if (_binding == null) return
+        val speed = if (::playerController.isInitialized) {
+            playerController.playbackParameters.speed
+        } else {
+            1f
+        }
+        val is2x = speed >= 1.95f
+        val label = getString(if (is2x) R.string.prime_speed_2x else R.string.prime_speed_1x)
+        binding.miniSpeed.text = label
+        binding.miniSpeed.alpha = if (is2x) 1f else 0.65f
+        // keep the fullscreen bottom bar toggle in sync too
+        runCatching {
+            playerControlsBinding.speedToggle.text = label
+            playerControlsBinding.speedToggle.alpha = if (is2x) 1f else 0.65f
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupMiniSeek() {
+        binding.miniSeek.max = MINI_SEEK_MAX
+
+        binding.miniSeek.setOnTouchListener { view, event ->
+            if (_binding == null || !::playerController.isInitialized) {
+                return@setOnTouchListener false
+            }
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    miniSeekDragging = true
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                    showMiniPreview()
+                    updateMiniPreview(event.x, view.width)
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    updateMiniPreview(event.x, view.width)
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val duration = playerController.duration
+                    if (event.actionMasked == MotionEvent.ACTION_UP && duration > 0) {
+                        val fraction = (event.x / view.width.toFloat()).coerceIn(0f, 1f)
+                        playerController.seekTo((fraction * duration).toLong())
+                    }
+                    miniSeekDragging = false
+                    hideMiniPreview()
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun startMiniProgressUpdates() {
+        if (miniProgressHandler == null) {
+            miniProgressHandler = Handler(Looper.getMainLooper())
+        }
+        miniProgressRunnable?.let { miniProgressHandler?.removeCallbacks(it) }
+
+        val runnable = object : Runnable {
+            override fun run() {
+                updateMiniSeekProgress()
+                miniProgressHandler?.postDelayed(this, 500)
+            }
+        }
+        miniProgressRunnable = runnable
+        miniProgressHandler?.post(runnable)
+    }
+
+    private fun stopMiniProgressUpdates() {
+        miniProgressRunnable?.let { miniProgressHandler?.removeCallbacks(it) }
+        miniProgressRunnable = null
+    }
+
+    private fun updateMiniSeekProgress() {
+        if (_binding == null || miniSeekDragging || !::playerController.isInitialized) return
+
+        val duration = playerController.duration
+        if (duration <= 0) {
+            // live streams have no duration - no seekbar for them
+            binding.miniSeek.isGone = true
+            return
+        }
+
+        binding.miniSeek.isVisible = true
+        val progress = (
+            playerController.currentPosition.toFloat() / duration * MINI_SEEK_MAX
+            ).toInt().coerceIn(0, MINI_SEEK_MAX)
+        binding.miniSeek.progress = progress
+    }
+
+    private fun showMiniPreview() {
+        if (_binding == null) return
+
+        runCatching {
+            ensureMiniPreviewPopup()
+            val popup = miniPreviewPopup ?: return@runCatching
+            val content = popup.contentView
+            content.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+
+            val barWidth = binding.miniSeek.width
+            val xoff = if (barWidth > 0) (barWidth - content.measuredWidth) / 2 else 0
+            val yoff = -(content.measuredHeight + binding.miniSeek.height + (6 * resources.displayMetrics.density).toInt())
+
+            popup.showAsDropDown(binding.miniSeek, xoff, yoff)
+        }
+    }
+
+    private fun hideMiniPreview() {
+        runCatching { miniPreviewPopup?.dismiss() }
+    }
+
+    private fun ensureMiniPreviewPopup() {
+        if (miniPreviewPopup != null || !isAdded) return
+
+        val context = requireContext()
+        val density = context.resources.displayMetrics.density
+
+        val imageView = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(Color.BLACK)
+            layoutParams = LinearLayout.LayoutParams(
+                (128 * density).toInt(),
+                (72 * density).toInt()
+            )
+        }
+
+        val textView = TextView(context).apply {
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            gravity = android.view.Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                topMargin = (4 * density).toInt()
+            }
+        }
+
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.prime_preview_card)
+            setPadding(
+                (6 * density).toInt(),
+                (6 * density).toInt(),
+                (6 * density).toInt(),
+                (8 * density).toInt()
+            )
+            addView(imageView)
+            addView(textView)
+        }
+
+        miniPreviewImageView = imageView
+        miniPreviewTextView = textView
+        miniPreviewPopup = PopupWindow(
+            container,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            isClippingEnabled = true
+            elevation = 6 * density
+        }
+    }
+
+    private fun updateMiniPreview(x: Float, barWidth: Int) {
+        if (_binding == null || !::playerController.isInitialized) return
+
+        val duration = playerController.duration
+        if (duration <= 0) return
+
+        val fraction = if (barWidth > 0) (x / barWidth).coerceIn(0f, 1f) else 0f
+        val targetMs = (fraction * duration).toLong()
+
+        miniPreviewTextView?.text = formatMiniTime(targetMs)
+
+        // only fetch a new storyboard frame when the position changed notably
+        if (abs(targetMs - miniLastPreviewRequestMs) < 2000) return
+        miniLastPreviewRequestMs = targetMs
+        fetchMiniPreviewFrame(targetMs)
+    }
+
+    private fun fetchMiniPreviewFrame(positionMs: Long) {
+        if (miniFrameLoading) return
+
+        val receiver = miniTimeFrameReceiver
+        if (receiver == null) {
+            loadMiniTimeFrameReceiver()
+            return
+        }
+
+        miniFrameLoading = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            val frame = runCatching {
+                withContext(Dispatchers.IO) { receiver.getFrameAtTime(positionMs) }
+            }.getOrNull()
+            miniFrameLoading = false
+            if (frame != null) miniPreviewImageView?.setImageBitmap(frame)
+        }
+    }
+
+    private fun loadMiniTimeFrameReceiver() {
+        if (miniTimeFrameReceiverLoading) return
+        if (!isOffline && !::streams.isInitialized) return
+
+        miniTimeFrameReceiverLoading = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            miniTimeFrameReceiver = runCatching { getTimeFrameReceiver() }.getOrNull()
+            miniTimeFrameReceiverLoading = false
+        }
+    }
+
+    private fun formatMiniTime(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.getDefault(), "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.getDefault(), "%d:%02d", minutes, seconds)
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupMiniGesture() {
+        binding.player.setOnTouchListener { view, event ->
+            if (_binding == null) return@setOnTouchListener false
+            if (commonPlayerViewModel.isMiniPlayerVisible.value != true) {
+                return@setOnTouchListener false
+            }
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    miniGestureActive = false
+                    miniGestureStartY = event.y
+                    false
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = miniGestureStartY - event.y
+                    if (!miniGestureActive && abs(dy) > view.height * 0.12f) {
+                        miniGestureActive = true
+                        miniGestureIsBrightness = event.x < view.width / 2f
+                        miniGestureStartValue =
+                            if (miniGestureIsBrightness) currentMiniBrightness() else currentMiniVolume()
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    if (!miniGestureActive) return@setOnTouchListener false
+
+                    val fraction = (miniGestureStartValue + dy / (view.height * 1.6f))
+                        .coerceIn(0f, 1f)
+
+                    if (miniGestureIsBrightness) {
+                        setMiniBrightness(fraction)
+                        binding.miniGestureIndicator.text = getString(
+                            R.string.prime_gesture_brightness,
+                            (fraction * 100).toInt()
+                        )
+                    } else {
+                        setMiniVolume(fraction)
+                        binding.miniGestureIndicator.text = getString(
+                            R.string.prime_gesture_volume,
+                            (fraction * 100).toInt()
+                        )
+                    }
+                    showMiniGestureIndicator()
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val wasActive = miniGestureActive
+                    miniGestureActive = false
+                    if (wasActive) hideMiniGestureIndicator()
+                    wasActive
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun currentMiniBrightness(): Float {
+        val helper = runCatching {
+            miniBrightnessHelper ?: BrightnessHelper(baseActivity).also {
+                miniBrightnessHelper = it
+            }
+        }.getOrNull() ?: return 0.5f
+        return runCatching { helper.windowBrightness }.getOrDefault(0.5f).coerceIn(0.01f, 1f)
+    }
+
+    private fun setMiniBrightness(value: Float) {
+        runCatching {
+            val helper = miniBrightnessHelper ?: BrightnessHelper(baseActivity).also {
+                miniBrightnessHelper = it
+            }
+            helper.windowBrightness = value.coerceIn(0.01f, 1f)
+        }
+    }
+
+    private fun currentMiniVolume(): Float {
+        val helper = runCatching { requireContext() }.getOrNull()?.let { ctx ->
+            miniAudioHelper ?: AudioHelper(ctx).also { miniAudioHelper = it }
+        } ?: return 0.5f
+        return runCatching { helper.deviceVolume }.getOrDefault(0.5f)
+    }
+
+    private fun setMiniVolume(value: Float) {
+        runCatching {
+            val helper = miniAudioHelper ?: AudioHelper(requireContext()).also {
+                miniAudioHelper = it
+            }
+            helper.deviceVolume = value.coerceIn(0f, 1f)
+        }
+    }
+
+    private fun showMiniGestureIndicator() {
+        if (_binding == null) return
+        val indicator = binding.miniGestureIndicator
+        indicator.isVisible = true
+        indicator.animate().alpha(1f).setDuration(100).start()
+
+        handler.removeCallbacks(miniGestureIndicatorHideTask)
+        handler.postDelayed(miniGestureIndicatorHideTask, 700)
+    }
+
+    private fun hideMiniGestureIndicator() {
+        handler.removeCallbacks(miniGestureIndicatorHideTask)
+        handler.postDelayed(miniGestureIndicatorHideTask, 150)
+    }
+    // endregion
+
     // actions that don't depend on video information
     private fun initializeOnClickActions() {
+        initializeMiniPlayerControls()
+
         binding.closeImageView.setOnClickListener {
             killPlayerFragment()
         }
@@ -724,6 +1164,11 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         playerControlsBinding.skipNext.setOnClickListener {
             PlayingQueue.getNext()?.let { next -> playNextVideo(next) }
+        }
+
+        // PrimeTube: quick 2x speed toggle on the fullscreen bottom bar
+        playerControlsBinding.speedToggle.setOnClickListener {
+            runCatching { togglePlaybackSpeed2x() }
         }
 
         // PrimeTube: horizontal swipe on the fullscreen player switches the video
@@ -1467,6 +1912,12 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     override fun onDestroyView() {
         super.onDestroyView()
+
+        // PrimeTube: clean up the mini player extras
+        stopMiniProgressUpdates()
+        hideMiniPreview()
+        runCatching { miniPreviewPopup = null }
+
         _binding = null
     }
 
