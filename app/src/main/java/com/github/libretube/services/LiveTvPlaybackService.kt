@@ -31,7 +31,7 @@ class LiveTvPlaybackService : MediaSessionService() {
         // - a browser-ish User-Agent avoids simple UA filters on some servers
         // - longer timeouts keep flaky CDN origins from dying mid-buffer
         val dataSourceFactory = DefaultHttpDataSource.Factory()
-            .setDefaultUserAgent(USER_AGENT)
+            .setUserAgent(USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(12_000)
             .setReadTimeoutMs(12_000)
