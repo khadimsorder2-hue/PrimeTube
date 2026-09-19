@@ -601,6 +601,18 @@
     <string name="prime_speed_2x">2x</string>
     <string name="prime_gesture_brightness">Brightness %1$d%%</string>
     <string name="prime_gesture_volume">Volume %1$d%%</string>
+    <!-- PrimeTube: account / sign-in entry -->
+    <string name="prime_sign_in">Sign in</string>
+    <string name="prime_account_title">Account</string>
+    <string name="prime_account_signed_in_as">Signed in as %1$s</string>
+    <string name="prime_account_subscriptions">Go to subscriptions</string>
+    <string name="prime_account_sign_in">Sign in / Register</string>
+    <string name="prime_google_login_note">Note: Google/YouTube account login is not possible in third-party YouTube apps — YouTube blocks it. PrimeTube accounts (per instance) take 10 seconds to register and enable subscriptions, playlists and history sync.</string>
+    <!-- PrimeTube: age-restricted fallback -->
+    <string name="prime_age_restricted">This video is age-restricted. Retrying with another source…</string>
+    <string name="prime_source_fallback">Primary source failed — retried with an alternative source</string>
+    <string name="prime_stream_failed">Could not load this video. The instance may be blocked by YouTube — try another instance in Settings → Instance.</string>
+    <string name="prime_removed_from_list">Removed</string>
     <string name="tooltip_filter">Filter</string>
     <string name="tooltip_edit_groups">Edit groups</string>
     <string name="tooltip_create_playlist">Create playlist</string>

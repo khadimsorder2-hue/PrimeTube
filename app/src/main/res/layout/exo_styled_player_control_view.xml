@@ -46,6 +46,32 @@
                 android:layout_gravity="center"
                 android:layoutDirection="ltr">
 
+                <!-- PrimeTube: direct quality / autoplay / speed controls in the top bar -->
+
+                <ImageButton
+                    android:id="@+id/autoplay_toggle"
+                    style="@style/PlayerControlTop"
+                    android:layout_marginEnd="2dp"
+                    android:src="@drawable/ic_play_circle"
+                    android:tooltipText="@string/player_autoplay"
+                    app:tint="@android:color/white" />
+
+                <ImageButton
+                    android:id="@+id/quality_toggle"
+                    style="@style/PlayerControlTop"
+                    android:layout_marginEnd="2dp"
+                    android:src="@drawable/ic_hd"
+                    android:tooltipText="@string/quality"
+                    app:tint="@android:color/white" />
+
+                <ImageButton
+                    android:id="@+id/speed_top"
+                    style="@style/PlayerControlTop"
+                    android:layout_marginEnd="2dp"
+                    android:src="@drawable/ic_speed"
+                    android:tooltipText="@string/playback_speed"
+                    app:tint="@android:color/white" />
+
                 <!-- PrimeTube: queue (playlist) button back in the top bar -->
                 <ImageButton
                     android:id="@+id/queue_toggle"

@@ -221,6 +221,7 @@ class CustomExoPlayerView(
         initRewindAndForward()
         applyCaptionsStyle()
         initializeAdvancedOptions()
+        initializeTopBarControls()
 
         setupKeyboardFocus()
 
@@ -539,6 +540,33 @@ class CustomExoPlayerView(
             val items = getOptionsMenuItems()
             val bottomSheetFragment = BaseBottomSheet().setItems(items, null)
             bottomSheetFragment.show(supportFragmentManager, null)
+        }
+    }
+
+    /**
+     * PrimeTube: direct quality / autoplay / speed controls in the player top bar.
+     * All handlers are guarded so a failure can never crash playback.
+     */
+    private fun initializeTopBarControls() {
+        binding.autoplayToggle.setOnClickListener {
+            runCatching {
+                PlayerHelper.autoPlayEnabled = !PlayerHelper.autoPlayEnabled
+                updateAutoplayState()
+            }
+        }
+        binding.qualityToggle.setOnClickListener {
+            runCatching { onQualityClicked() }
+        }
+        binding.speedTop.setOnClickListener {
+            runCatching { onPlaybackSpeedClicked() }
+        }
+        updateAutoplayState()
+    }
+
+    private fun updateAutoplayState() {
+        runCatching {
+            val enabled = PlayerHelper.autoPlayEnabled
+            binding.autoplayToggle.alpha = if (enabled) 1f else 0.4f
         }
     }
 

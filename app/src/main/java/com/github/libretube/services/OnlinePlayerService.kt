@@ -148,15 +148,25 @@ open class OnlinePlayerService : AbstractPlayerService() {
         // so that it can be canceled once a different video is loaded
         fetchVideoInfoJob = scope.launch {
             streams = withContext(Dispatchers.IO) {
-                try {
-                    MediaServiceRepository.instance.getStreams(videoId).let {
-                        DeArrowUtil.deArrowStreams(it, videoId)
+                val fetched = runCatching {
+                    MediaServiceRepository.instance.getStreams(videoId)
+                }.getOrElse { primaryError ->
+                    Log.e(TAG(), primaryError.stackTraceToString())
+
+                    // PrimeTube: age-restricted videos and blocked instances often work
+                    // through the other source (local extraction <-> Piped) - retry once
+                    val retried = MediaServiceRepository
+                        .getStreamsFromAlternativeSource(videoId)
+                    if (retried != null) {
+                        toastFromMainDispatcher(R.string.prime_source_fallback)
+                        retried
+                    } else {
+                        toastFromMainDispatcher(primeReadableStreamError(primaryError))
+                        return@withContext null
                     }
-                }  catch (e: Exception) {
-                    Log.e(TAG(), e.stackTraceToString())
-                    toastFromMainDispatcher(e.localizedMessage.orEmpty())
-                    return@withContext null
                 }
+
+                DeArrowUtil.deArrowStreams(fetched, videoId)
             } ?: return@launch
 
             // PrimeTube: if the instance only offers streams below 1440p, fetch YouTube's
@@ -188,6 +198,18 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
         fetchVideoInfoJob?.join()
         fetchVideoInfoJob = null
+    }
+
+    /**
+     * PrimeTube: map raw stream-fetch exceptions to messages the user can act on.
+     */
+    private fun primeReadableStreamError(e: Exception): String {
+        val signature = (e.message.orEmpty() + " " + e.javaClass.simpleName).lowercase()
+        return when {
+            "age" in signature || "sign in" in signature || "confirm" in signature ->
+                getString(R.string.prime_age_restricted)
+            else -> getString(R.string.prime_stream_failed)
+        }
     }
 
     private fun configurePlayer(seekToPositionMs: Long) {

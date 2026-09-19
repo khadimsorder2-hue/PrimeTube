@@ -7,4 +7,12 @@
     <string name="prime_speed_2x">2x</string>
     <string name="prime_gesture_brightness">উজ্জ্বলতা %1$d%%</string>
     <string name="prime_gesture_volume">ভলিউম %1$d%%</string>
+    <string name="prime_sign_in">সাইন ইন</string>
+    <string name="prime_account_title">অ্যাকাউন্ট</string>
+    <string name="prime_account_signed_in_as">সাইন ইন করা আছে: %1$s</string>
+    <string name="prime_removed_from_list">সরানো হয়েছে</string>
+    <string name="prime_age_restricted">এই ভিডিওটি age-restricted। অন্য সোর্স দিয়ে আবার চেষ্টা করা হচ্ছে…</string>
+    <string name="prime_source_fallback">মূল সোর্স কাজ করেনি — বিকল্প সোর্স দিয়ে লোড হয়েছে</string>
+    <string name="prime_stream_failed">ভিডিও লোড করা যায়নি। ইনস্ট্যান্স YouTube-এর কাছে ব্লকড হতে পারে — Settings → Instance থেকে অন্য একটা চেষ্টা করুন।</string>
+    <string name="prime_google_login_note">দ্রষ্টব্য: তৃতীয় পক্ষের YouTube অ্যাপে Google/YouTube অ্যাকাউন্ট দিয়ে লগইন করা সম্ভব না — YouTube এটা ব্লক করে। PrimeTube-এর নিজস্ব অ্যাকাউন্ট (প্রতি instance-এ) ১০ সেকেন্ডে খোলা যায়, যাতে subscription, playlist ও history sync কাজ করে।</string>
 </resources>

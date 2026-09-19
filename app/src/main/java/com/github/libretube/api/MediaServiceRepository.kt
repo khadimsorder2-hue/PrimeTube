@@ -49,6 +49,21 @@ interface MediaServiceRepository {
                 PlayerHelper.localStreamExtraction -> LocalStreamsExtractionPipedMediaServiceRepository()
                 else -> PipedMediaServiceRepository()
             }
+
+        /**
+         * PrimeTube: fetch streams from the source that is NOT the currently
+         * selected one (local extraction <-> Piped). Used as an automatic
+         * second chance when the primary source fails, e.g. for age-restricted
+         * videos or blocked instances. Returns null when both sources fail.
+         */
+        suspend fun getStreamsFromAlternativeSource(videoId: String): Streams? {
+            val alternative = if (instance is PipedMediaServiceRepository) {
+                NewPipeMediaServiceRepository()
+            } else {
+                PipedMediaServiceRepository()
+            }
+            return runCatching { alternative.getStreams(videoId) }.getOrNull()
+        }
     }
 }
 
