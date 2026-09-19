@@ -21,6 +21,18 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <!-- PrimeTube: developer card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/developer"
+            style="@style/AboutCard">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                style="@style/AboutItem"
+                android:text="@string/prime_developer"
+                app:drawableStartCompat="@drawable/ic_github" />
+
+        </com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/donate"
             style="@style/AboutCard">

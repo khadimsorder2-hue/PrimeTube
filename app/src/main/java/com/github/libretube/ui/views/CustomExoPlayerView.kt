@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Color
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.format.DateUtils
@@ -16,7 +15,6 @@ import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.core.os.postDelayed
@@ -51,7 +49,6 @@ import com.github.libretube.extensions.navigateVideo
 import com.github.libretube.extensions.normalize
 import com.github.libretube.extensions.round
 import com.github.libretube.extensions.seekBy
-import com.github.libretube.extensions.toID
 import com.github.libretube.extensions.togglePlayPauseState
 import com.github.libretube.extensions.updateIfChanged
 import com.github.libretube.helpers.AudioHelper
@@ -64,8 +61,6 @@ import com.github.libretube.obj.VideoResolution
 import com.github.libretube.services.AbstractPlayerService
 import com.github.libretube.ui.base.BaseActivity
 import com.github.libretube.ui.controllers.FullscreenGestureAnimationController
-import com.github.libretube.ui.dialogs.SubmitDeArrowDialog
-import com.github.libretube.ui.dialogs.SubmitSegmentDialog
 import com.github.libretube.ui.extensions.toggleSystemBars
 import com.github.libretube.ui.interfaces.CustomPlayerCallback
 import com.github.libretube.ui.interfaces.PlayerGestureOptions
@@ -260,12 +255,6 @@ class CustomExoPlayerView(
             binding.exoProgress.addSeekBarListener(seekBarListener)
         }
 
-        binding.autoPlay.isChecked = PlayerHelper.autoPlayEnabled
-
-        binding.autoPlay.setOnCheckedChangeListener { _, isChecked ->
-            PlayerHelper.autoPlayEnabled = isChecked
-        }
-
         // restore the duration type from the previous session
         updateDisplayedDurationType()
 
@@ -313,10 +302,6 @@ class CustomExoPlayerView(
                 args.getString(IntentData.videoId) ?: return@setFragmentResultListener
             )
         }
-        binding.queueToggle.setOnClickListener {
-            PlayingQueueSheet().show(supportFragmentManager, null)
-        }
-
         updateMarginsByFullscreenMode()
 
         commonPlayerViewModel.isFullscreen.observe(viewLifecycleOwner) { isFullscreen ->
@@ -331,39 +316,7 @@ class CustomExoPlayerView(
             updateResolution(isFullscreen)
         }
 
-        val updateSbImageResource = {
-            binding.sbToggle.setImageResource(
-                if (sponsorBlockAutoSkip) R.drawable.ic_sb_enabled else R.drawable.ic_sb_disabled
-            )
-        }
-        updateSbImageResource()
-        binding.sbToggle.setOnClickListener {
-            sponsorBlockAutoSkip = !sponsorBlockAutoSkip
-            (player as? MediaController)?.sendCustomCommand(
-                AbstractPlayerService.runPlayerActionCommand, bundleOf(
-                    PlayerCommand.SET_SB_AUTO_SKIP_ENABLED.name to sponsorBlockAutoSkip
-                )
-            )
-            updateSbImageResource()
-        }
-
         syncQueueButtons()
-
-        binding.sbSubmit.isVisible =
-            PreferenceHelper.getBoolean(PreferenceKeys.CONTRIBUTE_TO_SB, false)
-        binding.sbSubmit.setOnClickListener {
-            val submitSegmentDialog = SubmitSegmentDialog()
-            submitSegmentDialog.arguments = buildSbBundleArgs() ?: return@setOnClickListener
-            submitSegmentDialog.show((context as BaseActivity).supportFragmentManager, null)
-        }
-
-        binding.dearrowSubmit.isVisible =
-            PreferenceHelper.getBoolean(PreferenceKeys.CONTRIBUTE_TO_DEARROW, false)
-        binding.dearrowSubmit.setOnClickListener {
-            val submitDialog = SubmitDeArrowDialog()
-            submitDialog.arguments = buildSbBundleArgs() ?: return@setOnClickListener
-            submitDialog.show((context as BaseActivity).supportFragmentManager, null)
-        }
 
         binding.playPauseBTN.setOnClickListener {
             player.togglePlayPauseState()
@@ -388,28 +341,6 @@ class CustomExoPlayerView(
         binding.exoProgress.setPlayer(player)
 
         if (player.isPlaying) keepScreenOn = true
-
-        // locking the player
-        binding.lockPlayer.setOnClickListener {
-            // change the locked/unlocked icon
-            val icon = if (!isPlayerLocked) R.drawable.ic_locked else R.drawable.ic_unlocked
-            val tooltip = if (!isPlayerLocked) {
-                R.string.tooltip_unlocked
-            } else {
-                R.string.tooltip_locked
-            }
-
-            binding.lockPlayer.setImageResource(icon)
-            TooltipCompat.setTooltipText(binding.lockPlayer, context.getString(tooltip))
-
-            // show/hide all the controls
-            lockPlayer(isPlayerLocked)
-
-            // change locked status
-            isPlayerLocked = !isPlayerLocked
-
-            if (isFullscreen()) toggleSystemBars(!isPlayerLocked)
-        }
 
         updateCurrentPosition()
     }
@@ -457,18 +388,6 @@ class CustomExoPlayerView(
         } else {
             durationString
         }
-    }
-
-    private fun buildSbBundleArgs(): Bundle? {
-        val currentPosition = player?.currentPosition?.takeIf { it != C.TIME_UNSET } ?: 0
-        val duration = player?.duration?.takeIf { it != C.TIME_UNSET }
-        val videoId = PlayingQueue.getCurrent()?.url?.toID() ?: return null
-
-        return bundleOf(
-            IntentData.currentPosition to currentPosition,
-            IntentData.duration to duration,
-            IntentData.videoId to videoId
-        )
     }
 
     /**
@@ -755,37 +674,6 @@ class CustomExoPlayerView(
         )
     }
 
-
-    // lock the player
-    private fun lockPlayer(isLocked: Boolean) {
-        // isLocked is the current (old) state of the player lock
-        binding.exoTopBarRight.isVisible = isLocked
-        binding.exoCenterControls.isVisible = isLocked
-        binding.bottomBar.isVisible = isLocked
-        binding.closeImageButton.isVisible = isLocked
-        binding.exoTitle.isVisible = isLocked
-        binding.playPauseBTN.isVisible = isLocked
-
-        if (!PlayerHelper.doubleTapToSeek) {
-            binding.seekButtonRewind.rewindBTN.isVisible = isLocked
-            binding.seekButtonForward.forwardBTN.isVisible = isLocked
-        }
-
-        // hide the dimming background overlay if locked
-        backgroundBinding.exoControlsBackground.setBackgroundColor(
-            if (isLocked) {
-                ContextCompat.getColor(
-                    context,
-                    androidx.media3.ui.R.color.exo_black_opacity_60
-                )
-            } else {
-                Color.TRANSPARENT
-            }
-        )
-
-        // disable tap and swipe gesture if the player is locked
-        playerGestureController.areControlsLocked = !isLocked
-    }
 
     private fun rewind() {
         player?.seekBy(-PlayerHelper.seekIncrement)

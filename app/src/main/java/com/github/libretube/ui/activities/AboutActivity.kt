@@ -31,6 +31,8 @@ class AboutActivity : BaseActivity() {
 
         setupCard(binding.donate, DONATE_URL)
         setupCard(binding.website, WEBSITE_URL)
+        // PrimeTube: the GitHub card and the developer card point to the PrimeTube repo
+        setupCard(binding.developer, GITHUB_URL)
         setupCard(binding.piped, PIPED_GITHUB_URL)
         setupCard(binding.translate, WEBLATE_URL)
         setupCard(binding.github, GITHUB_URL)
@@ -111,7 +113,8 @@ class AboutActivity : BaseActivity() {
     companion object {
         const val DONATE_URL = "https://github.com/libre-tube/LibreTube#donate"
         private const val WEBSITE_URL = "https://libretube.dev"
-        const val GITHUB_URL = "https://github.com/libre-tube/LibreTube"
+        // PrimeTube: point all GitHub links to the PrimeTube repository
+        const val GITHUB_URL = "https://github.com/khadimsorder2-hue/PrimeTube"
         private const val PIPED_GITHUB_URL = "https://github.com/TeamPiped/Piped"
         private const val WEBLATE_URL = "https://hosted.weblate.org/projects/libretube/libretube/"
         private const val LICENSE_URL = "https://gnu.org/"

@@ -607,4 +607,24 @@
     <string name="home_recommended">Recommended</string>
     <string name="home_recommended_empty">No recommendations yet. Watch a few videos and your home feed will build itself around what you like.</string>
     <string name="home_continue_empty">Nothing to continue right now. Videos you haven\'t finished will show up here.</string>
+    <!-- PrimeTube save-to-storage downloads -->
+    <string name="save_to_storage">Save to storage (MP4)</string>
+    <string name="save_to_storage_summary">Download the video as a normal MP4 file into a folder of your choice - phone storage or SD card. The file stays after uninstalling and shows up in the Saved files tab.</string>
+    <string name="mp4_download_folder">MP4 download folder</string>
+    <string name="mp4_download_folder_summary">Choose where saved MP4 files go (phone storage or SD card). Default: Movies/PrimeTube in your storage.</string>
+    <string name="mp4_folder_set">Folder: %1$s</string>
+    <string name="download_saved">Video saved to storage</string>
+    <string name="download_failed_with_reason">Download failed: %1$s</string>
+    <string name="download_preparing">Preparing download…</string>
+    <string name="download_in_progress">Downloading %1$s</string>
+    <string name="no_muxed_stream">No combined video+audio stream found for saving. Use Seal or the offline downloader for this video.</string>
+    <string name="no_download_folder">Choose an MP4 download folder first: Settings → General → MP4 download folder</string>
+    <string name="saved_files">Saved files</string>
+    <string name="saved_files_empty">No saved files yet. Downloads marked "Save to storage (MP4)" appear here and in your phone storage.</string>
+    <string name="open_file">Open</string>
+    <string name="delete_file">Delete file</string>
+    <string name="file_deleted">File deleted</string>
+    <string name="could_not_open_file">No app found to open this file</string>
+    <!-- PrimeTube about -->
+    <string name="prime_developer">Khademul Islam — PrimeTube Developer</string>
 </resources>

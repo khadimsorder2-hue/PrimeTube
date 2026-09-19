@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: premium translucent circular background with ripple for the play/pause button -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#55FFFFFF">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#4D000000" />
+        </shape>
+    </item>
+</ripple>

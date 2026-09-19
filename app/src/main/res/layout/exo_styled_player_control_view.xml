@@ -9,6 +9,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:animateLayoutChanges="true"
+        android:background="@drawable/player_scrim_top"
         android:orientation="vertical"
         android:paddingHorizontal="5dp"
         android:paddingTop="5dp">
@@ -18,40 +19,24 @@
             android:layout_height="wrap_content"
             android:layoutDirection="ltr">
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layoutDirection="ltr">
-
-                <ImageView
-                    android:id="@+id/close_imageButton"
-                    style="@style/PlayerControlTop"
-                    android:layout_marginEnd="-10dp"
-                    android:src="@drawable/ic_close"
-                    android:tooltipText="@string/tooltip_minimize"
-                    app:tint="@android:color/white" />
-
-                <ImageView
-                    android:id="@+id/lock_player"
-                    style="@style/PlayerControlTop"
-                    android:scaleX="0.8"
-                    android:scaleY="0.8"
-                    android:src="@drawable/ic_unlocked" />
-
-            </LinearLayout>
-
+            <!-- PrimeTube: clean premium top bar - video title on the left,
+                 only the options (settings) button on the right -->
             <TextView
                 android:id="@+id/exo_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:layout_marginHorizontal="10dp"
+                android:layout_marginHorizontal="14dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
+                android:shadowColor="#AA000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4"
                 android:textColor="@android:color/white"
                 android:textSize="18sp"
+                android:textStyle="bold"
                 android:visibility="invisible" />
 
             <LinearLayout
@@ -60,54 +45,6 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:layoutDirection="ltr">
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/autoPlay"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="2dp"
-                    android:scaleX="0.8"
-                    android:scaleY="0.8"
-                    android:thumb="@drawable/player_switch_thumb"
-                    android:tooltipText="@string/player_autoplay"
-                    app:thumbTint="@android:color/white"
-                    app:track="@drawable/player_switch_track"
-                    app:trackTint="#88ffffff" />
-
-                <ImageButton
-                    android:id="@+id/dearrow_submit"
-                    style="@style/PlayerControlTop"
-                    android:layout_marginEnd="2dp"
-                    android:src="@drawable/ic_dearrow"
-                    android:tooltipText="@string/contribute_to_dearrow"
-                    android:visibility="gone"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:id="@+id/sb_submit"
-                    style="@style/PlayerControlTop"
-                    android:layout_marginEnd="2dp"
-                    android:src="@drawable/ic_upload_segment"
-                    android:tooltipText="@string/sb_create_segment"
-                    android:visibility="gone"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:id="@+id/sb_toggle"
-                    style="@style/PlayerControlTop"
-                    android:layout_marginEnd="2dp"
-                    android:src="@drawable/ic_sb_enabled"
-                    android:tooltipText="@string/tooltip_sponsorblock"
-                    android:visibility="gone"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:id="@+id/queue_toggle"
-                    style="@style/PlayerControlTop"
-                    android:layout_marginEnd="2dp"
-                    android:src="@drawable/ic_queue"
-                    android:tooltipText="@string/queue"
-                    app:tint="@android:color/white" />
 
                 <ImageButton
                     android:id="@+id/toggle_options"
@@ -150,7 +87,8 @@
             android:id="@+id/playPauseBTN"
             style="@style/ExoStyledControls.Button.Center.PlayPause"
             android:layout_marginHorizontal="10dp"
-            android:background="?android:selectableItemBackgroundBorderless"
+            android:background="@drawable/player_center_btn_bg"
+            android:padding="14dp"
             android:src="@drawable/ic_play"
             app:tint="@android:color/white" />
 
@@ -176,6 +114,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:layout_marginTop="10dp"
+        android:background="@drawable/player_scrim_bottom"
         android:orientation="vertical">
 
         <LinearLayout
@@ -319,7 +258,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:paddingTop="6dp"
-                app:bar_height="2dp"
+                app:bar_height="3dp"
                 app:played_color="?attr/colorSecondary"
                 app:scrubber_color="?attr/colorSecondary"
                 app:scrubber_dragged_size="16dp"
