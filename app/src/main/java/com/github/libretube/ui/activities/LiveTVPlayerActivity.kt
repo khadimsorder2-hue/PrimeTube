@@ -60,6 +60,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private var channels: List<LiveChannel> = emptyList()
     private var currentIndex = -1
     private var errorRetries = 0
+
+    /** PrimeTube: consecutive automatic channel hops caused by playback errors. */
+    private var autoHops = 0
     private var isFillMode = true
     private var lockedQualityHeight = Int.MAX_VALUE
 
@@ -78,25 +81,33 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_READY) {
                 errorRetries = 0
+                autoHops = 0
                 _binding?.livePlayerError?.isVisible = false
                 syncQueueHighlight()
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // PrimeTube: retry twice, then hop to the next channel
+            // PrimeTube: retry twice, then hop to the next channel.
+            // After too many dead channels in a row, stop and show the retry
+            // overlay instead of looping through the whole playlist forever.
             if (errorRetries < 2) {
                 errorRetries++
                 toast(getString(R.string.prime_live_retrying, errorRetries))
                 handler.postDelayed({
+                    if (_binding == null) return@postDelayed
                     controller?.let {
                         it.prepare()
                         it.play()
                     }
                 }, 1200)
-            } else {
+            } else if (autoHops < MAX_AUTO_HOPS) {
+                autoHops++
                 toast(R.string.prime_live_retry_next)
-                handler.postDelayed({ skipChannel(+1) }, 800)
+                handler.postDelayed({ skipChannel(+1, autoHop = true) }, 800)
+            } else {
+                autoHops = 0
+                _binding?.livePlayerError?.isVisible = true
             }
         }
     }
@@ -166,9 +177,23 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             applicationContext,
             LiveTvPlaybackService::class.java
         ) { c ->
-            this.controller = c
-            c.addListener(playerListener)
-            startOrResume()
+            // PrimeTube fix: the callback of startMediaService runs on a
+            // background executor. Touching views from there crashes with
+            // CalledFromWrongThreadException, so everything is marshalled
+            // to the main thread first.
+            handler.post {
+                val b = _binding ?: return@post
+                this.controller = c
+                c.addListener(playerListener)
+
+                // PrimeTube fix (the big one): the controller was never
+                // attached to the PlayerView, so no video ever rendered and
+                // the controls stayed dead. This line makes the picture and
+                // the YouTube-like UI appear.
+                b.livePlayerView.player = c
+                b.livePlayerView.controllerShowTimeoutMs = 3500
+                startOrResume()
+            }
         }
     }
 
@@ -190,11 +215,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         playChannel(currentIndex)
     }
 
-    private fun playChannel(index: Int) {
+    private fun playChannel(index: Int, autoHop: Boolean = false) {
         val c = controller ?: return
         val channel = channels.getOrNull(index) ?: return
         currentIndex = index
         errorRetries = 0
+        if (!autoHop) autoHops = 0
         binding.liveTitle.text = channel.name
         updateHeaderLogo()
 
@@ -237,10 +263,10 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         if (logo != null) ImageHelper.loadImage(logo, binding.liveLogo)
     }
 
-    private fun skipChannel(dir: Int) {
+    private fun skipChannel(dir: Int, autoHop: Boolean = false) {
         if (channels.isEmpty()) return
         val target = (if (currentIndex < 0) 0 else currentIndex + dir).mod(channels.size)
-        playChannel(target)
+        playChannel(target, autoHop)
     }
 
     private fun retryNow() {
@@ -433,11 +459,17 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         controller?.removeListener(playerListener)
+        // PrimeTube: only the connection is closed - the channel keeps
+        // playing in LiveTvPlaybackService (mini bar in MainActivity).
+        controller?.release()
         controller = null
         _binding = null
     }
 
     companion object {
+        /** PrimeTube: stop auto-hopping after this many dead channels in a row. */
+        private const val MAX_AUTO_HOPS = 4
+
         const val EXTRA_NAME = "live_tv_name"
         const val EXTRA_URL = "live_tv_url"
         const val EXTRA_LOGO = "live_tv_logo"

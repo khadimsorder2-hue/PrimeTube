@@ -3,7 +3,9 @@ package com.github.libretube.services
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.github.libretube.helpers.LiveTvState
@@ -23,7 +25,19 @@ class LiveTvPlaybackService : MediaSessionService() {
         super.onCreate()
         LiveTvState.isActive = true
 
+        // PrimeTube: IPTV hardened HTTP stack.
+        // - cross-protocol redirects (http<->https) are essential: plenty of
+        //   IPTV servers redirect and ExoPlayer refuses them by default
+        // - a browser-ish User-Agent avoids simple UA filters on some servers
+        // - longer timeouts keep flaky CDN origins from dying mid-buffer
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setDefaultUserAgent(USER_AGENT)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(12_000)
+            .setReadTimeoutMs(12_000)
+
         val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -56,5 +70,12 @@ class LiveTvPlaybackService : MediaSessionService() {
         }
         mediaSession = null
         super.onDestroy()
+    }
+
+    companion object {
+        /** PrimeTube: browser-like UA so IPTV servers with UA filters let us through. */
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/124.0 Mobile Safari/537.36 PrimeTube/1.0"
     }
 }
