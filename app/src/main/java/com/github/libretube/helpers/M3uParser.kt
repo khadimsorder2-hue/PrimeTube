@@ -17,6 +17,16 @@ object M3uParser {
 
     private val attrRegex = Regex("([A-Za-z0-9_-]+)=\"([^\"]*)\"")
 
+    /**
+     * PrimeTube: playlist noise filter - promo/telegram entries and Google Drive
+     * "channels" are not real TV channels and must never appear in the grid
+     * (e.g. the "জয়েন করুন টেলিগ্রামে" first entry of the playlist).
+     */
+    private val skipRegex = Regex(
+        "telegram|join|টেলিগ্রাম|googleapis\\.com/drive",
+        RegexOption.IGNORE_CASE
+    )
+
     fun parse(text: String): List<LiveChannel> {
         val channels = mutableListOf<LiveChannel>()
         var pendingName: String? = null
@@ -40,7 +50,10 @@ object M3uParser {
                 line.isNotEmpty() && !line.startsWith("#") -> {
                     val url = line
                     val name = pendingName
-                    if ((url.startsWith("http://") || url.startsWith("https://")) &&
+                    val isNoise = skipRegex.containsMatchIn(name.orEmpty()) ||
+                        skipRegex.containsMatchIn(url)
+                    if (!isNoise &&
+                        (url.startsWith("http://") || url.startsWith("https://")) &&
                         !name.isNullOrBlank()
                     ) {
                         channels.add(

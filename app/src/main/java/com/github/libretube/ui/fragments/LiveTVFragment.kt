@@ -27,9 +27,10 @@ class LiveTVFragment : Fragment(R.layout.fragment_live_tv) {
     private val binding get() = _binding!!
     private var loaded = false
 
-    private val adapter = LiveTVAdapter { channel ->
+    private val adapter = LiveTVAdapter { channel, index ->
         startActivity(
             Intent(requireContext(), LiveTVPlayerActivity::class.java)
+                .putExtra(LiveTVPlayerActivity.EXTRA_INDEX, index)
                 .putExtra(LiveTVPlayerActivity.EXTRA_NAME, channel.name)
                 .putExtra(LiveTVPlayerActivity.EXTRA_URL, channel.url)
                 .putExtra(LiveTVPlayerActivity.EXTRA_LOGO, channel.logo)
