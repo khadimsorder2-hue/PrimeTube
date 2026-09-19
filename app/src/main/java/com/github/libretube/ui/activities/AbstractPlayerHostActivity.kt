@@ -3,6 +3,7 @@ package com.github.libretube.ui.activities
 import android.content.Intent
 import android.view.MenuItem
 import com.github.libretube.R
+import com.github.libretube.ui.base.BaseActivity
 import com.github.libretube.ui.fragments.AudioPlayerFragment
 import com.github.libretube.ui.fragments.PlayerFragment
 
