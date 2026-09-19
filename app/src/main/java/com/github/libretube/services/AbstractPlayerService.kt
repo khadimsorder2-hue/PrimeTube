@@ -343,42 +343,29 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
     }
 
     /**
-     * PrimeTube: when this service is started with Context.startForegroundService() (e.g. when
-     * entering PiP or switching to background play), the system requires Service.startForeground()
-     * to be called within 5 seconds. media3 only posts the playback notification once playback is
-     * prepared, which on slow networks takes longer than that - resulting in
+     * PrimeTube: every start of this service through Context.startForegroundService() (media
+     * button PendingIntents from the playback notification / PiP window actions go through it)
+     * REQUIRES Service.startForeground() to be called afterwards - even when the service is
+     * already in the foreground and even while playback is active. media3 only posts its
+     * playback notification at its own discretion, which leaves a window in which the system
+     * kills the whole process with
      * "RemoteServiceException: Context.startForegroundService() did not then call
-     * Service.startForeground()", a killed app process and a frozen PiP window.
+     * Service.startForeground()" - the PiP window freezes and the screen locks shortly after.
      *
-     * Immediately promote the service to foreground with a placeholder notification instead.
-     * It uses the same notification id as the media3 DefaultMediaNotificationProvider, so it is
-     * seamlessly replaced as soon as the real playback notification is posted.
-     *
-     * The service is also demoted from the foreground by the system in a number of situations
-     * (dismissed notification, stopped/errored playback) while media items may still be attached
-     * to the player. In that state a subsequent startForegroundService() would never reach
-     * startForeground() again - so promote unless the player is *actively* playing, which is the
-     * only state in which media3 is guaranteed to already own the foreground notification.
+     * Therefore ALWAYS promote the service to the foreground here, with a placeholder
+     * notification using the same notification id as the media3 provider, so it is seamlessly
+     * replaced as soon as the real playback notification is posted.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        promiseForegroundIfNeeded()
+        promiseForeground()
         return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun promiseForegroundIfNeeded() {
-        val player = exoPlayer
-        // only skip when media3 definitely owns the foreground: playback is active
-        val media3OwnsForeground = player != null &&
-            player.currentMediaItem != null &&
-            player.playbackState != Player.STATE_IDLE &&
-            player.playerError == null &&
-            (player.isPlaying || player.playWhenReady)
-        if (media3OwnsForeground) return
-
+    private fun promiseForeground() {
         runCatching {
             // use the metadata of the current item (if any) so that the placeholder looks
             // like a regular playback notification instead of a blank one
-            val metadata = player?.currentMediaItem?.mediaMetadata
+            val metadata = exoPlayer?.currentMediaItem?.mediaMetadata
             val notification = NotificationCompat.Builder(this, PLAYER_CHANNEL_NAME)
                 .setSmallIcon(R.drawable.ic_launcher_lockscreen)
                 .setContentTitle(metadata?.title ?: getString(R.string.app_name))

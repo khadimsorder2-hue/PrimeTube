@@ -21,6 +21,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
+import android.view.WindowManager
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -228,6 +229,13 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             if (fragmentActivity != null && _binding != null) {
                 runCatching {
                     PictureInPictureCompat.setPictureInPictureParams(fragmentActivity, pipParams)
+                }
+
+                // PrimeTube: the screen must stay on while the video is playing in PiP
+                runCatching {
+                    if (PictureInPictureCompat.isInPictureInPictureMode(fragmentActivity)) {
+                        updatePipKeepScreenOn(fragmentActivity, isPlaying)
+                    }
                 }
             }
 
@@ -1345,7 +1353,20 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
             openOrCloseFullscreenDialog(true)
             pipActivity = activity
+
+            // PrimeTube: keep the screen on while the video plays in PiP. The player view
+            // (which normally holds the keepScreenOn flag) is moved into the fullscreen
+            // dialog during PiP, where the flag is not reliably honored - so the flag is
+            // also set on the activity window.
+            activity?.let {
+                updatePipKeepScreenOn(it, ::playerController.isInitialized && playerController.isPlaying)
+            }
         } else {
+            // PrimeTube: PiP is over - hand the keep-screen-on handling back to the player view
+            activity?.window?.let { window ->
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+
             binding.player.useController = true
 
             // close button got clicked in PiP mode
@@ -1367,6 +1388,20 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
     fun onUserLeaveHint() {
         if (shouldStartPiP()) {
             PictureInPictureCompat.enterPictureInPictureMode(requireActivity(), pipParams)
+        }
+    }
+
+    /**
+     * PrimeTube: keeps the screen on while a video is playing in PiP mode so the video does
+     * not "lock the screen" shortly after entering PiP.
+     */
+    private fun updatePipKeepScreenOn(activity: Activity, isPlaying: Boolean) {
+        runCatching {
+            if (isPlaying) {
+                activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
         }
     }
 
