@@ -359,12 +359,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         queueAdapter?.submitList(channels)
         syncQueueHighlight()
 
-        // at most ~20% of the player width (small floor for usability)
+        // PrimeTube: same 25% transparent corner panel as the YouTube player
         val playerWidth = window.decorView.width.takeIf { it > 0 }
             ?: resources.displayMetrics.widthPixels
         val minWidth = (resources.displayMetrics.density * 150).toInt()
         binding.liveQueuePanel.layoutParams = binding.liveQueuePanel.layoutParams.apply {
-            width = maxOf((playerWidth * 0.2f).toInt(), minWidth)
+            width = maxOf((playerWidth * 0.25f).toInt(), minWidth)
         }
         root.isVisible = true
 

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PrimeTube: translucent rounded background of the queue side panel -->
+<!-- PrimeTube: transparent rounded background of the queue side panel
+     (YouTube + Live TV use the same one so both players look identical) -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#CC141414" />
+    <solid android:color="#80141414" />
     <corners
-        android:topLeftRadius="12dp"
-        android:bottomLeftRadius="12dp" />
+        android:topLeftRadius="14dp"
+        android:bottomLeftRadius="14dp" />
 </shape>

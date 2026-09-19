@@ -1112,8 +1112,8 @@ class CustomExoPlayerView(
     }
 
     /**
-     * PrimeTube: YouTube-style queue side panel. Translucent, with a close
-     * button and at most ~20% of the player width so the video stays visible.
+     * PrimeTube: YouTube-style queue side panel. Transparent, with a close
+     * button and at most ~25% of the player width so the video stays visible.
      */
     private fun toggleQueuePanel() {
         val root = binding.queuePanelRoot
@@ -1133,12 +1133,12 @@ class CustomExoPlayerView(
             queuePanelAdapter = adapter
         }
 
-        // at most ~20% of the player width (small floor for usability)
+        // at most ~25% of the player width (small floor for usability)
         val playerWidth = width.takeIf { it > 0 }
             ?: resources.displayMetrics.widthPixels
         val minWidth = (resources.displayMetrics.density * 140).toInt()
         binding.queuePanel.layoutParams = binding.queuePanel.layoutParams.apply {
-            width = maxOf((playerWidth * 0.2f).toInt(), minWidth)
+            width = maxOf((playerWidth * 0.25f).toInt(), minWidth)
         }
 
         queuePanelAdapter?.refresh()
