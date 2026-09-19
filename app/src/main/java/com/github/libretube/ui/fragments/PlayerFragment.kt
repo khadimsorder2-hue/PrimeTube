@@ -222,22 +222,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            // PrimeTube: the player state can change while the fragment is already detached
-            // (e.g. during PiP handoff or rotation) - updating the PiP params is best-effort
-            // and must never crash the app here
-            val fragmentActivity = activity
-            if (fragmentActivity != null && _binding != null) {
-                runCatching {
-                    PictureInPictureCompat.setPictureInPictureParams(fragmentActivity, pipParams)
-                }
-
-                // PrimeTube: the screen must stay on while the video is playing in PiP
-                runCatching {
-                    if (PictureInPictureCompat.isInPictureInPictureMode(fragmentActivity)) {
-                        updatePipKeepScreenOn(fragmentActivity, isPlaying)
-                    }
-                }
-            }
+            // PrimeTube: PiP has been removed - nothing PiP related runs on play state changes
 
             if (isPlaying && PlayerHelper.sponsorBlockEnabled) {
                 handler.postDelayed(
@@ -654,9 +639,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         binding.playerMotionLayout.progress = 1F
         binding.playerMotionLayout.transitionToStart()
-
-        val activity = requireActivity()
-        PictureInPictureCompat.setPictureInPictureParams(activity, pipParams)
     }
 
     private fun closeMiniPlayer() {
@@ -716,13 +698,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         binding.relPlayerBackground.setOnClickListener {
             // start the background mode
             switchToAudioMode()
-        }
-
-        binding.relPlayerPip.isVisible = isPipAvailable()
-
-        binding.relPlayerPip.setOnClickListener {
-            PictureInPictureCompat.enterPictureInPictureMode(requireActivity(), pipParams)
-            isEnteringPiPMode = true
         }
 
         binding.relatedRecView.layoutManager = LinearLayoutManager(
@@ -972,14 +947,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
                 Bundle.EMPTY
             )
             playerController.release()
-        }
-
-        // disable the auto PiP mode for SDK >= 32
-        // wrapped in runCatching since the activity may already be finishing/destroyed
-        // at this point, which makes the system throw an IllegalStateException
-        runCatching {
-            PictureInPictureCompat
-                .setPictureInPictureParams(requireActivity(), pipParams)
         }
 
         runCatching {
@@ -1416,7 +1383,8 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
                         isPlaying
                     )
                 )
-                .setAutoEnterEnabled(isPlaying)
+                // PrimeTube: never auto-enter PiP - PiP is disabled in PrimeTube
+                .setAutoEnterEnabled(false)
                 .apply {
                     if (isPlaying) {
                         setAspectRatio(playerController.videoSize)
@@ -1426,10 +1394,12 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         }
 
     /**
-     * Detect whether PiP is supported and enabled
+     * PrimeTube: PiP has been removed completely (it caused device freezes/lockups on
+     * several devices). Background playback is the way to keep listening outside of
+     * the app - so PiP is never available and never started.
      */
     private fun isPipAvailable(): Boolean {
-        return PictureInPictureCompat.isPictureInPictureAvailable(requireContext())
+        return false
     }
 
     private fun shouldStartPiP(): Boolean {
