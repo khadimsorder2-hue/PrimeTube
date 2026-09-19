@@ -92,6 +92,11 @@ class PlayingQueueSheet : ExpandedBottomSheet(R.layout.queue_bottom_sheet) {
             allowSwipe = true,
             allowDrag = true,
             onDismissedListener = { position ->
+                if (position == PlayingQueue.currentIndex()) {
+                    // the currently playing video cannot be swiped away
+                    adapter.refresh()
+                    return@setActionListener
+                }
                 // PrimeTube: refresh the whole snapshot - granular notifies on a
                 // list that the player service mutates in background caused
                 // IndexOutOfBoundsException crashes

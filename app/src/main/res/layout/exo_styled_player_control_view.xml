@@ -318,4 +318,62 @@
 
     </LinearLayout>
 
+    <!-- PrimeTube: YouTube-style queue side panel - translucent, close button,
+         at most ~20% of the screen, overlays the right side of the player -->
+    <FrameLayout
+        android:id="@+id/queue_panel_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/queue_panel"
+            android:layout_width="180dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end|top"
+            android:layout_marginTop="52dp"
+            android:background="@drawable/prime_queue_panel_bg"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="6dp"
+                android:paddingVertical="6dp">
+
+                <TextView
+                    android:id="@+id/queue_panel_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/prime_queue_title"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/queue_panel_close"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/tooltip_close"
+                    android:src="@drawable/ic_close"
+                    app:tint="@android:color/white" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/queue_panel_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingBottom="70dp" />
+        </LinearLayout>
+    </FrameLayout>
+
 </merge>

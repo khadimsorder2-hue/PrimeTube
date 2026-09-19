@@ -72,7 +72,9 @@ import com.github.libretube.ui.models.PlayerViewModel
 import com.github.libretube.ui.sheets.BaseBottomSheet
 import com.github.libretube.ui.sheets.ChaptersBottomSheet
 import com.github.libretube.ui.sheets.PlaybackOptionsSheet
+import com.github.libretube.ui.adapters.PlayingQueueAdapter
 import com.github.libretube.ui.sheets.PlayingQueueSheet
+import com.github.libretube.ui.views.SafeLinearLayoutManager
 import com.github.libretube.ui.sheets.SleepTimerSheet
 import com.github.libretube.ui.sheets.StatsSheet
 import com.github.libretube.ui.tools.SleepTimer
@@ -306,9 +308,15 @@ class CustomExoPlayerView(
             )
         }
 
-        // PrimeTube: the queue (playlist) button in the player top bar
+        // PrimeTube: the queue (playlist) button in the player top bar -
+        // in fullscreen it opens the YouTube-style side panel, otherwise the sheet
         binding.queueToggle.setOnClickListener {
-            PlayingQueueSheet().show(supportFragmentManager, null)
+            val isFullscreen = commonPlayerViewModel.isFullscreen.value == true
+            if (isFullscreen) {
+                toggleQueuePanel()
+            } else {
+                PlayingQueueSheet().show(supportFragmentManager, null)
+            }
         }
 
         updateMarginsByFullscreenMode()
@@ -321,6 +329,9 @@ class CustomExoPlayerView(
             binding.fullscreen.setImageResource(fullscreenDrawable)
 
             binding.exoTitle.isInvisible = !isFullscreen
+
+            // PrimeTube: close the queue side panel when leaving fullscreen
+            if (!isFullscreen) binding.queuePanelRoot.isGone = true
 
             updateResolution(isFullscreen)
         }
@@ -1099,6 +1110,43 @@ class CustomExoPlayerView(
 
         updateMarginsByFullscreenMode()
     }
+
+    /**
+     * PrimeTube: YouTube-style queue side panel. Translucent, with a close
+     * button and at most ~20% of the player width so the video stays visible.
+     */
+    private fun toggleQueuePanel() {
+        val root = binding.queuePanelRoot
+        if (root.isVisible) {
+            root.isGone = true
+            return
+        }
+
+        if (queuePanelAdapter == null) {
+            val adapter = PlayingQueueAdapter { videoId ->
+                (player as? MediaController)?.navigateVideo(videoId)
+                queuePanelAdapter?.refresh()
+            }
+            binding.queuePanelRecycler.layoutManager = SafeLinearLayoutManager(context)
+            binding.queuePanelRecycler.adapter = adapter
+            binding.queuePanelClose.setOnClickListener { binding.queuePanelRoot.isGone = true }
+            queuePanelAdapter = adapter
+        }
+
+        // at most ~20% of the player width (small floor for usability)
+        val playerWidth = width.takeIf { it > 0 }
+            ?: resources.displayMetrics.widthPixels
+        val minWidth = (resources.displayMetrics.density * 140).toInt()
+        binding.queuePanel.layoutParams = binding.queuePanel.layoutParams.apply {
+            width = maxOf((playerWidth * 0.2f).toInt(), minWidth)
+        }
+
+        queuePanelAdapter?.refresh()
+        root.isVisible = true
+    }
+
+    /** PrimeTube: state holder of the queue side panel adapter */
+    private var queuePanelAdapter: PlayingQueueAdapter? = null
 
     /**
      * Updates the margins according to the current orientation and fullscreen mode

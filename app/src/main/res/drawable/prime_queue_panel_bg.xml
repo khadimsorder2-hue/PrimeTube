@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: translucent rounded background of the queue side panel -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#CC141414" />
+    <corners
+        android:topLeftRadius="12dp"
+        android:bottomLeftRadius="12dp" />
+</shape>
