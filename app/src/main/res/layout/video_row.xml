@@ -194,4 +194,20 @@
 
     </LinearLayout>
 
+    <!-- PrimeTube: per-row remove button (only used by the watch history /
+         continue watching adapters - hidden everywhere else) -->
+    <ImageView
+        android:id="@+id/remove_btn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="8dp"
+        android:src="@drawable/ic_close"
+        android:contentDescription="@string/prime_removed_from_list"
+        android:visibility="gone"
+        app:tint="?attr/colorControlNormal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/video_info_container" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

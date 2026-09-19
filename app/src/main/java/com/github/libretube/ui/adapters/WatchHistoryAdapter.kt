@@ -26,8 +26,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class WatchHistoryAdapter :
-    ListAdapter<WatchHistoryItem, WatchHistoryViewHolder>(DiffUtilItemCallback()) {
+class WatchHistoryAdapter(
+    // PrimeTube: optional per-item remove action (watch history & continue watching)
+    private val onRemove: ((WatchHistoryItem) -> Unit)? = null
+) : ListAdapter<WatchHistoryItem, WatchHistoryViewHolder>(DiffUtilItemCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WatchHistoryViewHolder {
         val layoutInflater = LayoutInflater.from(parent.context)
@@ -100,6 +102,18 @@ class WatchHistoryAdapter :
                 video.videoId,
                 duration
             )
+
+            // PrimeTube: per-item remove button (visible only when a listener is set)
+            if (onRemove != null) {
+                removeBtn.isVisible = true
+                removeBtn.setOnClickListener {
+                    it.isEnabled = false
+                    runCatching { onRemove.invoke(video) }
+                }
+            } else {
+                removeBtn.isGone = true
+                removeBtn.setOnClickListener(null)
+            }
 
             CoroutineScope(Dispatchers.IO).launch {
                 // PrimeTube: a closed/migrating database must never crash the list

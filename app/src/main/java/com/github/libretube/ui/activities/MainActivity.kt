@@ -8,6 +8,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewTreeObserver
+import android.widget.Toast
 import android.widget.ScrollView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -40,6 +41,7 @@ import com.github.libretube.enums.ImportFormat
 import com.github.libretube.enums.SearchType
 import com.github.libretube.enums.TopLevelDestination
 import com.github.libretube.extensions.anyChildFocused
+import com.github.libretube.ui.dialogs.LoginDialog
 import com.github.libretube.helpers.ImportHelper
 import com.github.libretube.helpers.IntentHelper
 import com.github.libretube.helpers.NavBarHelper
@@ -612,10 +614,49 @@ class MainActivity : AbstractPlayerHostActivity() {
             binding.bottomNav.removeBadge(R.id.subscriptionsFragment)
         }
 
+        // PrimeTube: the avatar item is an action, not a tab - open the
+        // account/sign-in dialog and keep the current tab selected
+        if (item.itemId == R.id.signInNavItem) {
+            runCatching { openAccountSheet() }
+            return false
+        }
+
         // Remove focus from search view when navigating to bottom view.
         searchItem.collapseActionView()
 
         return item.onNavDestinationSelected(navController)
+    }
+
+    /**
+     * PrimeTube: account entry point behind the avatar bottom-nav item.
+     * - signed in: account dialog with the current user + logout
+     * - not signed in: the sign-in/register dialog (with built-in help)
+     */
+    private fun openAccountSheet() {
+        val token = PreferenceHelper.getToken()
+        val username = PreferenceHelper.getUsername()
+
+        if (token.isNotBlank()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.prime_account_title)
+                .setMessage(getString(R.string.prime_account_signed_in_as, username))
+                .setPositiveButton(R.string.logout) { _, _ ->
+                    PreferenceHelper.setToken("")
+                    PreferenceHelper.setUsername("")
+                    Toast.makeText(this, R.string.loggedout, Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(R.string.okay, null)
+                .show()
+        } else {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.prime_account_title)
+                .setMessage(R.string.prime_google_login_note)
+                .setPositiveButton(R.string.login_register) { _, _ ->
+                    LoginDialog().show(supportFragmentManager, LoginDialog::class.java.name)
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
     }
 
     override fun onUserLeaveHint() {

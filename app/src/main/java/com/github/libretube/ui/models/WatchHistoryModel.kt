@@ -71,6 +71,12 @@ class WatchHistoryModel : ViewModel() {
 
     fun removeFromHistory(watchHistoryItem: WatchHistoryItem) =
         viewModelScope.launch(Dispatchers.IO) {
+            // PrimeTube: also drop the watch position so no stale progress stays behind
+            runCatching {
+                DatabaseHolder.Database.watchPositionDao()
+                    .deleteByVideoId(watchHistoryItem.videoId)
+            }
+
             DatabaseHolder.Database.watchHistoryDao().delete(watchHistoryItem)
 
             watchHistory.postValue(

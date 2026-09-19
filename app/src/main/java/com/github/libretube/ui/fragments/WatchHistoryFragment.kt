@@ -44,7 +44,9 @@ class WatchHistoryFragment : DynamicLayoutManagerFragment(R.layout.fragment_watc
     private var recyclerViewState: Parcelable? = null
 
     private val viewModel: WatchHistoryModel by viewModels()
-    private val watchHistoryAdapter = WatchHistoryAdapter()
+    private val watchHistoryAdapter = WatchHistoryAdapter(
+        onRemove = { item -> viewModel.removeFromHistory(item) }
+    )
 
     override fun setLayoutManagers(gridItems: Int) {
         _binding?.watchHistoryRecView?.layoutManager =

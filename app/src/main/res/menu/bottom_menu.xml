@@ -29,4 +29,11 @@
         android:title="@string/downloads"
         android:visible="false" />
 
+    <!-- PrimeTube: sign in / account entry (avatar icon), opens the sign-in
+         dialog or the account actions when already signed in -->
+    <item
+        android:id="@+id/signInNavItem"
+        android:icon="@drawable/ic_avatar"
+        android:title="@string/prime_sign_in" />
+
 </menu>

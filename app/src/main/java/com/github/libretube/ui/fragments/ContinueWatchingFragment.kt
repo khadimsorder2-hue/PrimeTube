@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.github.libretube.R
 import com.github.libretube.databinding.FragmentContinueWatchingBinding
 import com.github.libretube.db.DatabaseHelper
+import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.db.obj.WatchHistoryItem
 import com.github.libretube.extensions.ceilHalf
 import com.github.libretube.helpers.PerformanceHelper
@@ -34,7 +35,9 @@ class ContinueWatchingFragment : DynamicLayoutManagerFragment(R.layout.fragment_
     private val binding get() = _binding!!
 
     private val viewModel: ContinueWatchingViewModel by viewModels()
-    private val continueWatchingAdapter = WatchHistoryAdapter()
+    private val continueWatchingAdapter = WatchHistoryAdapter(
+        onRemove = { item -> viewModel.removeVideo(item) }
+    )
 
     override fun setLayoutManagers(gridItems: Int) {
         _binding?.continueRecView?.layoutManager = GridLayoutManager(context, gridItems.ceilHalf())
@@ -111,6 +114,21 @@ class ContinueWatchingViewModel : ViewModel() {
 
         videos.postValue(
             if (reset) newVideos else videos.value.orEmpty() + newVideos
+        )
+    }
+
+    /**
+     * PrimeTube: remove a single entry from the Continue watching list by
+     * deleting its watch position - the history entry itself stays, exactly
+     * like YouTube's "remove from continue watching". Updates immediately.
+     */
+    fun removeVideo(item: WatchHistoryItem) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching {
+            DatabaseHolder.Database.watchPositionDao().deleteByVideoId(item.videoId)
+        }
+
+        videos.postValue(
+            videos.value.orEmpty().filter { it.videoId != item.videoId }
         )
     }
 
