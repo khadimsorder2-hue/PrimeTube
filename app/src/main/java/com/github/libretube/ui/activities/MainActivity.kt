@@ -689,7 +689,8 @@ class MainActivity : AbstractPlayerHostActivity() {
 
     override fun onStart() {
         super.onStart()
-        updateLiveTvMiniBar()
+        // binding can be uninitialized when onCreate exited early (no internet)
+        if (::binding.isInitialized) updateLiveTvMiniBar()
     }
 
     private var liveTvController: MediaController? = null
