@@ -707,4 +707,15 @@
     <string name="prime_source_invalid">Enter a valid name/link or pick a file</string>
     <string name="prime_source_load_failed">Could not load this playlist source</string>
     <string name="prime_favorite">Favorite</string>
+    <string name="prime_category_all">All</string>
+    <string name="prime_sleep_chip">Sleep</string>
+    <string name="prime_sleep_title">Sleep timer</string>
+    <string name="prime_sleep_off">Off</string>
+    <string name="prime_sleep_minutes">%1$d min</string>
+    <string name="prime_sleep_set">Sleep timer: %1$d minutes</string>
+    <string name="prime_sleep_done">Sleep timer finished - Live TV stopped</string>
+    <string name="prime_channel_jump">Go to channel number</string>
+    <string name="prime_go">Go</string>
+    <string name="prime_channel_invalid">No channel with this number</string>
+    <string name="prime_live_reconnected">Internet is back - resuming…</string>
 </resources>

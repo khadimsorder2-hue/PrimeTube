@@ -209,6 +209,40 @@
                     android:textStyle="bold"
                     app:drawableStartCompat="@drawable/ic_queue"
                     app:drawableTint="@android:color/white" />
+
+                <!-- PrimeTube: sleep timer chip -->
+                <TextView
+                    android:id="@+id/liveSleepChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/prime_chip_bg"
+                    android:contentDescription="@string/prime_sleep_title"
+                    android:drawablePadding="6dp"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/prime_sleep_chip"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:drawableStartCompat="@drawable/ic_sleep"
+                    app:drawableTint="@android:color/white" />
+
+                <!-- PrimeTube: channel-number jump chip (TV-style "123") -->
+                <TextView
+                    android:id="@+id/liveNumberChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/prime_chip_bg"
+                    android:contentDescription="@string/prime_channel_jump"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="7dp"
+                    android:text="123"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    tools:ignore="HardcodedText" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>

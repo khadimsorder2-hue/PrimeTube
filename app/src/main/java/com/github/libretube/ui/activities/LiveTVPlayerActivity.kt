@@ -2,13 +2,19 @@ package com.github.libretube.ui.activities
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -39,6 +45,7 @@ import com.github.libretube.ui.adapters.LiveTVAdapter
 import com.github.libretube.ui.models.LiveChannel
 import com.github.libretube.ui.views.SafeLinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -80,6 +87,29 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private var controlsVisible = false
     private val hideControlsRunnable = Runnable { setControlsVisible(false) }
 
+    // PrimeTube: sleep timer state (Live TV stops when the timer fires)
+    private var sleepEndTime: Long? = null
+    private val sleepTickRunnable = object : Runnable {
+        override fun run() {
+            val end = sleepEndTime ?: return
+            val remaining = end - System.currentTimeMillis()
+            if (remaining <= 0) {
+                sleepEndTime = null
+                _binding?.liveSleepChip?.text = getString(R.string.prime_sleep_chip)
+                toast(R.string.prime_sleep_done)
+                finish()
+                return
+            }
+            val minutes = (remaining / 60000).toInt()
+            val seconds = ((remaining / 1000) % 60).toInt()
+            _binding?.liveSleepChip?.text = String.format(Locale.US, "%d:%02d", minutes, seconds)
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    /** PrimeTube: set after a playback error, cleared on STATE_READY. */
+    private var hadPlaybackError = false
+
     // gesture state
     private var gestureActive = false
     private var gestureBrightness = false
@@ -93,6 +123,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             if (playbackState == Player.STATE_READY) {
                 errorRetries = 0
                 autoHops = 0
+                hadPlaybackError = false
                 _binding?.livePlayerError?.isVisible = false
                 syncQueueHighlight()
             }
@@ -117,6 +148,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            hadPlaybackError = true
             // PrimeTube: retry twice, then hop to the next channel.
             // After too many dead channels in a row, stop and show the retry
             // overlay instead of looping through the whole playlist forever.
@@ -155,6 +187,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveFillChip.setOnClickListener { toggleFillMode() }
         binding.liveQualityChip.setOnClickListener { showQualityDialog() }
         binding.liveQueueChip.setOnClickListener { toggleQueuePanel() }
+        binding.liveSleepChip.setOnClickListener { showSleepDialog() }
+        binding.liveNumberChip.setOnClickListener { showNumberJumpDialog() }
         binding.liveQueueClose.setOnClickListener {
             binding.liveQueueRoot.isGone = true
             resetChannelSearch()
@@ -163,6 +197,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveControlsSink.setOnClickListener { setControlsVisible(false) }
 
         setupGestures()
+        registerNetworkWatcher()
         loadChannelsAndStart()
     }
 
@@ -287,6 +322,99 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private fun togglePlayback() {
         val p = player ?: return
         if (p.isPlaying) p.pause() else p.play()
+    }
+
+    // ---------- sleep timer ----------
+
+    /** PrimeTube: Live TV sleep timer - the player closes when it fires. */
+    private fun showSleepDialog() {
+        val minutesList = listOf(0, 15, 30, 60, 90)
+        val labels = minutesList.map { minutes ->
+            if (minutes == 0) getString(R.string.prime_sleep_off)
+            else getString(R.string.prime_sleep_minutes, minutes)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.prime_sleep_title)
+            .setItems(labels.toTypedArray()) { _, which ->
+                setSleepTimer(minutesList[which])
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun setSleepTimer(minutes: Int) {
+        handler.removeCallbacks(sleepTickRunnable)
+        if (minutes <= 0) {
+            sleepEndTime = null
+            binding.liveSleepChip.text = getString(R.string.prime_sleep_chip)
+            toast(R.string.prime_sleep_off)
+            return
+        }
+        sleepEndTime = System.currentTimeMillis() + minutes * 60_000L
+        toast(getString(R.string.prime_sleep_set, minutes))
+        handler.postDelayed(sleepTickRunnable, 1000)
+    }
+
+    // ---------- channel number jump (TV-style 123) ----------
+
+    private fun showNumberJumpDialog() {
+        if (channels.isEmpty()) return
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = "1 - ${channels.size}"
+            setSingleLine(true)
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val wrapper = FrameLayout(this)
+        wrapper.setPadding(pad, pad / 2, pad, 0)
+        wrapper.addView(input)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.prime_channel_jump)
+            .setView(wrapper)
+            .setPositiveButton(R.string.prime_go) { _, _ ->
+                val number = input.text.toString().toIntOrNull()
+                when {
+                    number == null -> Unit
+                    number in 1..channels.size -> {
+                        binding.liveQueueRoot.isGone = true
+                        playChannel(number - 1)
+                    }
+                    else -> toast(R.string.prime_channel_invalid)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    // ---------- auto reconnect: internet back = stream back ----------
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            handler.post {
+                if (_binding == null) return@post
+                val p = player ?: return@post
+                val stuck = hadPlaybackError || p.playbackState == Player.STATE_IDLE
+                if (stuck && NetworkHelper.isNetworkAvailable(this@LiveTVPlayerActivity)) {
+                    toast(R.string.prime_live_reconnected)
+                    retryNow()
+                }
+            }
+        }
+    }
+
+    private fun registerNetworkWatcher() {
+        runCatching {
+            (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                .registerDefaultNetworkCallback(networkCallback)
+        }
+    }
+
+    private fun unregisterNetworkWatcher() {
+        runCatching {
+            (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                .unregisterNetworkCallback(networkCallback)
+        }
     }
 
     private fun updateHeaderLogo() {
@@ -573,6 +701,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        unregisterNetworkWatcher()
         player?.release()
         player = null
         _binding = null

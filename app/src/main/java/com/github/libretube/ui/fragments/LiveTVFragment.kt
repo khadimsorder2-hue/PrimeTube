@@ -28,6 +28,7 @@ import com.github.libretube.helpers.ThemeHelper
 import com.github.libretube.ui.adapters.LiveTVAdapter
 import com.github.libretube.ui.activities.LiveTVPlayerActivity
 import com.github.libretube.ui.models.LiveChannel
+import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
@@ -86,12 +87,57 @@ class LiveTVFragment : Fragment(R.layout.fragment_live_tv) {
 
     private var fullChannels: List<LiveChannel> = emptyList()
 
+    /** PrimeTube: the active category filter (null = All). */
+    private var selectedCategory: String? = null
+
     /** PrimeTube: star toggle - re-sorts so favorites move to the top. */
     private fun toggleFavorite(channel: LiveChannel) {
         val context = context ?: return
         LiveTvHelper.toggleFavorite(context, channel.name)
         adapter.setFavorites(LiveTvHelper.getFavoriteNames(context))
-        adapter.submitList(LiveTvHelper.sortChannels(context, fullChannels))
+        adapter.submitList(sortedFilteredChannels())
+    }
+
+    /** PrimeTube: favorites/recent ordering + the active category filter. */
+    private fun sortedFilteredChannels(): List<LiveChannel> {
+        val context = context ?: return fullChannels
+        val sorted = LiveTvHelper.sortChannels(context, fullChannels)
+        val category = selectedCategory ?: return sorted
+        return sorted.filter { it.group == category }
+    }
+
+    /** PrimeTube: category chips from the channel groups of the playlist. */
+    private fun buildCategoryChips() {
+        val context = context ?: return
+        val categories = fullChannels.mapNotNull { it.group?.trim()?.takeIf { g -> g.isNotBlank() } }
+            .groupingBy { it }.eachCount()
+            .entries.sortedByDescending { it.value }.take(12)
+            .map { it.key }
+            .sorted()
+        val b = _binding ?: return
+        b.liveCategories.removeAllViews()
+        if (categories.isEmpty()) {
+            b.liveCategoriesScroll.isVisible = false
+            return
+        }
+        b.liveCategoriesScroll.isVisible = true
+
+        fun addChip(label: String, category: String?, checked: Boolean) {
+            val chip = Chip(context).apply {
+                text = label
+                isCheckable = true
+                isChecked = checked
+                setTextAppearanceResource(com.google.android.material.R.style.TextAppearance_Material3_LabelLarge)
+                setOnClickListener { _ ->
+                    selectedCategory = category
+                    adapter.submitList(sortedFilteredChannels())
+                }
+            }
+            b.liveCategories.addView(chip)
+        }
+
+        addChip(getString(R.string.prime_category_all), null, selectedCategory == null)
+        categories.forEach { group -> addChip(group, group, selectedCategory == group) }
     }
 
     override fun onCreateView(
@@ -148,8 +194,15 @@ class LiveTVFragment : Fragment(R.layout.fragment_live_tv) {
             val b = _binding ?: return@launch
             loaded = channels.isNotEmpty()
             fullChannels = channels
+            if (selectedCategory != null &&
+                fullChannels.none { it.group == selectedCategory }
+            ) {
+                // the new source may not have the previously chosen category
+                selectedCategory = null
+            }
             adapter.setFavorites(LiveTvHelper.getFavoriteNames(context.applicationContext))
-            adapter.submitList(LiveTvHelper.sortChannels(context.applicationContext, channels))
+            buildCategoryChips()
+            adapter.submitList(sortedFilteredChannels())
             b.liveSwipe.isRefreshing = false
             b.liveProgress.isVisible = false
             b.liveError.isVisible = channels.isEmpty()

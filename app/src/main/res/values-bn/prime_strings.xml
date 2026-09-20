@@ -60,4 +60,15 @@
     <string name="prime_source_invalid">সঠিক নাম/লিংক দিন বা ফাইল বাছুন</string>
     <string name="prime_source_load_failed">এই প্লেলিস্ট সোর্স লোড করা যায়নি</string>
     <string name="prime_favorite">প্রিয় চ্যানেল</string>
+    <string name="prime_category_all">সব</string>
+    <string name="prime_sleep_chip">স্লিপ</string>
+    <string name="prime_sleep_title">স্লিপ টাইমার</string>
+    <string name="prime_sleep_off">বন্ধ</string>
+    <string name="prime_sleep_minutes">%1$d মিনিট</string>
+    <string name="prime_sleep_set">স্লিপ টাইমার: %1$d মিনিট</string>
+    <string name="prime_sleep_done">স্লিপ টাইমার শেষ - লাইভ টিভি বন্ধ হয়েছে</string>
+    <string name="prime_channel_jump">চ্যানেল নম্বরে যান</string>
+    <string name="prime_go">যান</string>
+    <string name="prime_channel_invalid">এই নম্বরে কোনো চ্যানেল নেই</string>
+    <string name="prime_live_reconnected">ইন্টারনেট ফিরেছে - আবার চালু হচ্ছে…</string>
 </resources>
