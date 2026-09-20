@@ -44,7 +44,6 @@
             android:scaleX="0.9"
             android:scaleY="0.9"
             app:indicatorColor="#FF0033"
-            app:indicatorLineWidth="4dp"
             app:indicatorSize="44dp" />
 
         <TextView android:id="@id/exo_error_message"
