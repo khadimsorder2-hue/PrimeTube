@@ -16,6 +16,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -154,7 +155,10 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveFillChip.setOnClickListener { toggleFillMode() }
         binding.liveQualityChip.setOnClickListener { showQualityDialog() }
         binding.liveQueueChip.setOnClickListener { toggleQueuePanel() }
-        binding.liveQueueClose.setOnClickListener { binding.liveQueueRoot.isGone = true }
+        binding.liveQueueClose.setOnClickListener {
+            binding.liveQueueRoot.isGone = true
+            resetChannelSearch()
+        }
         binding.liveCenterPlay.setOnClickListener { togglePlayback() }
         binding.liveControlsSink.setOnClickListener { setControlsVisible(false) }
 
@@ -373,7 +377,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private fun setupQueuePanel() {
         val adapter = LiveTVAdapter { _, index ->
             binding.liveQueueRoot.isGone = true
+            resetChannelSearch()
             playChannel(index)
+        }
+        // PrimeTube: search inside the channels playlist
+        binding.liveQueueSearch.doAfterTextChanged { editable ->
+            applyChannelFilter(editable?.toString().orEmpty())
         }
         binding.liveQueueRecycler.layoutManager = SafeLinearLayoutManager(this)
         binding.liveQueueRecycler.adapter = adapter
@@ -382,12 +391,34 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         syncQueueHighlight()
     }
 
+    /** PrimeTube: filter the channel cards by name/group, blank shows all. */
+    private fun applyChannelFilter(query: String) {
+        val q = query.trim()
+        val list = if (q.isEmpty()) {
+            channels
+        } else {
+            channels.filter {
+                it.name.contains(q, ignoreCase = true) ||
+                    it.group?.contains(q, ignoreCase = true) == true
+            }
+        }
+        queueAdapter?.submitList(list)
+    }
+
+    private fun resetChannelSearch() {
+        if (binding.liveQueueSearch.text?.isNotEmpty() == true) {
+            binding.liveQueueSearch.setText("")
+        }
+    }
+
     private fun toggleQueuePanel() {
         val root = binding.liveQueueRoot
         if (root.isVisible) {
             root.isGone = true
+            resetChannelSearch()
             return
         }
+        resetChannelSearch()
         queueAdapter?.submitList(channels)
         syncQueueHighlight()
 

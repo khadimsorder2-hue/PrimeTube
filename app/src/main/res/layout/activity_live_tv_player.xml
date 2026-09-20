@@ -273,6 +273,27 @@
                     app:tint="@android:color/white" />
             </LinearLayout>
 
+            <!-- PrimeTube: search inside the channels playlist -->
+            <EditText
+                android:id="@+id/liveQueueSearch"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginTop="2dp"
+                android:background="@drawable/prime_search_bg"
+                android:contentDescription="@string/prime_search_hint"
+                android:drawableStart="@drawable/ic_search"
+                android:drawablePadding="6dp"
+                android:drawableTint="#CCFFFFFF"
+                android:hint="@string/prime_search_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:paddingHorizontal="10dp"
+                android:textColor="@android:color/white"
+                android:textColorHint="#88FFFFFF"
+                android:textSize="12sp" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/liveQueueRecycler"
                 android:layout_width="match_parent"

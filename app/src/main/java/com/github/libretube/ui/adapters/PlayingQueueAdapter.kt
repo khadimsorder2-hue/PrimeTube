@@ -31,6 +31,32 @@ class PlayingQueueAdapter(
 
     private var lastCurrentIndex: Int = PlayingQueue.currentIndex()
 
+    /** PrimeTube: live filter of the queue side panel (blank = show all). */
+    private var filterQuery: String = ""
+
+    /**
+     * PrimeTube: filter the visible queue rows by title/uploader without
+     * touching the real playback queue.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    fun setFilter(query: String) {
+        filterQuery = query.trim()
+        applyFilter()
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    private fun applyFilter() {
+        items = if (filterQuery.isEmpty()) {
+            PlayingQueue.getStreams()
+        } else {
+            PlayingQueue.getStreams().filter {
+                it.title?.contains(filterQuery, ignoreCase = true) == true ||
+                    it.uploaderName?.contains(filterQuery, ignoreCase = true) == true
+            }
+        }
+        notifyDataSetChanged()
+    }
+
     /**
      * Take a fresh snapshot of the queue and notify the RecyclerView only when
      * something actually changed (avoids flicker and keeps the adapter
@@ -40,6 +66,11 @@ class PlayingQueueAdapter(
     fun refresh() {
         val newItems = PlayingQueue.getStreams()
         val newIndex = PlayingQueue.currentIndex()
+        if (filterQuery.isNotEmpty()) {
+            lastCurrentIndex = newIndex
+            applyFilter()
+            return
+        }
         if (newItems == items && newIndex == lastCurrentIndex) return
         items = newItems
         lastCurrentIndex = newIndex
@@ -67,7 +98,7 @@ class PlayingQueueAdapter(
             videoInfo.text = streamItem.uploaderName + "  •  " +
                 DateUtils.formatElapsedTime(streamItem.duration ?: 0)
 
-            val currentIndex = lastCurrentIndex
+            val currentIndex = if (filterQuery.isEmpty()) lastCurrentIndex else -1
             root.setBackgroundColor(
                 if (currentIndex == position) {
                     ThemeHelper.getThemeColor(root.context, android.R.attr.colorControlHighlight)

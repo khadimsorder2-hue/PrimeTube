@@ -24,6 +24,7 @@ import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.core.view.marginStart
 import androidx.core.view.updateLayoutParams
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.media3.common.C
@@ -331,7 +332,7 @@ class CustomExoPlayerView(
             binding.exoTitle.isInvisible = !isFullscreen
 
             // PrimeTube: close the queue side panel when leaving fullscreen
-            if (!isFullscreen) binding.queuePanelRoot.isGone = true
+            if (!isFullscreen) hideQueuePanel()
 
             updateResolution(isFullscreen)
         }
@@ -1118,7 +1119,7 @@ class CustomExoPlayerView(
     private fun toggleQueuePanel() {
         val root = binding.queuePanelRoot
         if (root.isVisible) {
-            root.isGone = true
+            hideQueuePanel()
             return
         }
 
@@ -1129,7 +1130,11 @@ class CustomExoPlayerView(
             }
             binding.queuePanelRecycler.layoutManager = SafeLinearLayoutManager(context)
             binding.queuePanelRecycler.adapter = adapter
-            binding.queuePanelClose.setOnClickListener { binding.queuePanelRoot.isGone = true }
+            binding.queuePanelClose.setOnClickListener { hideQueuePanel() }
+            // PrimeTube: playlist search like YouTube
+            binding.queuePanelSearch.doAfterTextChanged { editable ->
+                queuePanelAdapter?.setFilter(editable?.toString().orEmpty())
+            }
             queuePanelAdapter = adapter
         }
 
@@ -1143,6 +1148,16 @@ class CustomExoPlayerView(
 
         queuePanelAdapter?.refresh()
         root.isVisible = true
+    }
+
+    /** PrimeTube: hides the queue side panel and resets the playlist search. */
+    private fun hideQueuePanel() {
+        binding.queuePanelRoot.isGone = true
+        if (binding.queuePanelSearch.hasFocus()) binding.queuePanelSearch.clearFocus()
+        if (binding.queuePanelSearch.text?.isNotEmpty() == true) {
+            binding.queuePanelSearch.setText("")
+            queuePanelAdapter?.setFilter("")
+        }
     }
 
     /** PrimeTube: state holder of the queue side panel adapter */
