@@ -283,6 +283,28 @@
                     android:textColor="@android:color/white"
                     android:textSize="13sp" />
 
+                <!-- PrimeTube: A-B loop / screenshot / lock controls -->
+                <ImageButton
+                    android:id="@+id/ab_toggle"
+                    style="@style/PlayerControlBottom"
+                    android:src="@drawable/ic_repeat"
+                    android:tooltipText="@string/prime_ab_repeat"
+                    app:tint="@android:color/white" />
+
+                <ImageButton
+                    android:id="@+id/screenshot_toggle"
+                    style="@style/PlayerControlBottom"
+                    android:src="@drawable/ic_camera"
+                    android:tooltipText="@string/prime_screenshot"
+                    app:tint="@android:color/white" />
+
+                <ImageButton
+                    android:id="@+id/lock_toggle"
+                    style="@style/PlayerControlBottom"
+                    android:src="@drawable/ic_locked"
+                    android:tooltipText="@string/prime_lock_controls"
+                    app:tint="@android:color/white" />
+
                 <ImageButton
                     android:id="@+id/fullscreen"
                     style="@style/PlayerControlBottom"

@@ -718,4 +718,16 @@
     <string name="prime_go">Go</string>
     <string name="prime_channel_invalid">No channel with this number</string>
     <string name="prime_live_reconnected">Internet is back - resuming…</string>
+    <string name="prime_ab_repeat">A-B repeat</string>
+    <string name="prime_ab_a_set">Start point set at %1$s - tap again for the end</string>
+    <string name="prime_ab_loop_on">A-B loop on (%1$s - %2$s)</string>
+    <string name="prime_ab_reset">A-B loop off</string>
+    <string name="prime_ab_too_short">Too short - pick an end point further ahead</string>
+    <string name="prime_screenshot">Screenshot</string>
+    <string name="prime_screenshot_saved">Screenshot saved in %1$s</string>
+    <string name="prime_screenshot_failed">Screenshot failed</string>
+    <string name="prime_screenshot_folder">Pictures/PrimeTube</string>
+    <string name="prime_lock_controls">Lock screen</string>
+    <string name="prime_lock_on">Screen locked - tap the lock pill to unlock</string>
+    <string name="prime_lock_off">Screen unlocked</string>
 </resources>

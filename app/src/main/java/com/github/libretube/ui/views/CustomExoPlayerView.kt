@@ -4,17 +4,25 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
+import android.media.MediaScannerConnection
+import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.text.format.DateUtils
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.PixelCopy
 import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.core.os.postDelayed
@@ -80,6 +88,11 @@ import com.github.libretube.ui.sheets.SleepTimerSheet
 import com.github.libretube.ui.sheets.StatsSheet
 import com.github.libretube.ui.tools.SleepTimer
 import com.github.libretube.util.PlayingQueue
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -219,12 +232,16 @@ class CustomExoPlayerView(
         this.playerCallback = playerCallback
         super.player = player
 
+        // PrimeTube: fresh video - no leftover A-B loop
+        resetAbRepeat()
+
         initializeGestureProgress()
 
         initRewindAndForward()
         applyCaptionsStyle()
         initializeAdvancedOptions()
         initializeTopBarControls()
+        initializePrimeControls()
 
         setupKeyboardFocus()
 
@@ -352,6 +369,12 @@ class CustomExoPlayerView(
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 super.onIsPlayingChanged(isPlaying)
                 keepScreenOn = isPlaying
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                super.onPlaybackStateChanged(playbackState)
+                // PrimeTube: an A-B loop never survives the end of a video
+                if (playbackState == Player.STATE_ENDED) resetAbRepeat()
             }
         })
 
@@ -573,6 +596,237 @@ class CustomExoPlayerView(
             runCatching { onPlaybackSpeedClicked() }
         }
         updateAutoplayState()
+    }
+
+    // PrimeTube: haptic feedback shared by the premium player controls
+    private fun View.primeHaptic() {
+        performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    /**
+     * PrimeTube: the premium control row in the bottom bar - A-B repeat loop,
+     * screenshot and the screen lock, all with haptic feedback.
+     */
+    private fun initializePrimeControls() {
+        binding.abToggle.setOnClickListener {
+            it.primeHaptic()
+            cycleAbRepeat()
+        }
+        binding.screenshotToggle.setOnClickListener {
+            it.primeHaptic()
+            captureScreenshot()
+        }
+        binding.lockToggle.setOnClickListener {
+            it.primeHaptic()
+            setControlsLocked(!isPlayerLocked)
+        }
+        binding.playPauseBTN.setOnClickListener {
+            it.primeHaptic()
+            player?.togglePlayPauseState()
+        }
+    }
+
+    // ---------------- screen lock ----------------
+
+    private var lockIndicator: ImageView? = null
+
+    /**
+     * PrimeTube: YouTube-style screen lock. While locked the controls can
+     * never come up - only the small lock pill stays visible; tapping it
+     * unlocks again.
+     */
+    fun setControlsLocked(locked: Boolean) {
+        isPlayerLocked = locked
+        playerGestureController.areControlsLocked = locked
+        ensureLockIndicator()
+        lockIndicator?.isVisible = locked
+        binding.lockToggle.setImageResource(
+            if (locked) R.drawable.ic_locked else R.drawable.ic_unlocked
+        )
+        if (locked) {
+            hideController()
+            toast(getString(R.string.prime_lock_on))
+        } else {
+            toast(getString(R.string.prime_lock_off))
+            if (isControllerFullyVisible) enqueueHideControllerTask()
+        }
+    }
+
+    private fun ensureLockIndicator() {
+        if (lockIndicator != null) return
+        val pad = (resources.displayMetrics.density * 10).toInt()
+        val margin = (resources.displayMetrics.density * 16).toInt()
+        val view = ImageView(context).apply {
+            setImageResource(R.drawable.ic_locked)
+            setColorFilter(Color.WHITE)
+            setBackgroundResource(R.drawable.prime_gesture_pill)
+            setPadding(pad, pad, pad, pad)
+            isVisible = false
+            elevation = resources.displayMetrics.density * 24
+            contentDescription = context.getString(R.string.prime_lock_controls)
+            layoutParams = LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.TOP or android.view.Gravity.START
+            ).apply {
+                setMargins(margin, margin, margin, margin)
+            }
+            setOnClickListener {
+                it.primeHaptic()
+                setControlsLocked(false)
+            }
+        }
+        addView(view)
+        lockIndicator = view
+    }
+
+    // ---------------- A-B repeat ----------------
+
+    private var abPointA = -1L
+    private var abPointB = -1L
+
+    /**
+     * PrimeTube: A-B loop in three taps - first tap marks the start,
+     * second the end (loop starts), third tap cancels.
+     */
+    private fun cycleAbRepeat() {
+        val p = player ?: return
+        when {
+            abPointA < 0 -> {
+                abPointA = p.currentPosition
+                abPointB = -1L
+                binding.abToggle.alpha = 0.55f
+                toast(getString(R.string.prime_ab_a_set, DateUtils.formatElapsedTime(abPointA / 1000)))
+            }
+
+            abPointB < 0 -> {
+                val end = p.currentPosition
+                if (end - abPointA < 1000) {
+                    toast(R.string.prime_ab_too_short)
+                } else {
+                    abPointB = end
+                    binding.abToggle.alpha = 1f
+                    toast(
+                        getString(
+                            R.string.prime_ab_loop_on,
+                            DateUtils.formatElapsedTime(abPointA / 1000),
+                            DateUtils.formatElapsedTime(abPointB / 1000)
+                        )
+                    )
+                    startAbLoopPolling()
+                }
+            }
+
+            else -> {
+                resetAbRepeat()
+                toast(R.string.prime_ab_reset)
+            }
+        }
+    }
+
+    private fun startAbLoopPolling() {
+        runnableHandler.postDelayed(400, AB_REPEAT_TOKEN) { checkAbLoop() }
+    }
+
+    private fun checkAbLoop() {
+        val p = player
+        if (p == null || abPointA < 0 || abPointB <= abPointA) {
+            resetAbRepeat()
+            return
+        }
+        if (p.currentPosition >= abPointB) p.seekTo(abPointA)
+        startAbLoopPolling()
+    }
+
+    private fun resetAbRepeat() {
+        runnableHandler.removeCallbacksAndMessages(AB_REPEAT_TOKEN)
+        abPointA = -1L
+        abPointB = -1L
+        binding.abToggle.alpha = 1f
+    }
+
+    // ---------------- screenshot ----------------
+
+    /**
+     * PrimeTube: capture the current video frame with [PixelCopy] (works
+     * for SurfaceView content) and store it in Pictures/PrimeTube.
+     */
+    private fun captureScreenshot() {
+        val activity = context as? BaseActivity ?: return
+        if (player == null || width <= 0 || height <= 0) return
+        runCatching {
+            val location = IntArray(2)
+            getLocationOnScreen(location)
+            val rect = Rect(location[0], location[1], location[0] + width, location[1] + height)
+            val bitmap = Bitmap.createBitmap(rect.width(), rect.height(), Bitmap.Config.ARGB_8888)
+            PixelCopy.request(
+                activity.window,
+                rect,
+                bitmap,
+                { result ->
+                    if (result == PixelCopy.SUCCESS) {
+                        saveScreenshotAsync(bitmap)
+                    } else {
+                        toast(R.string.prime_screenshot_failed)
+                    }
+                },
+                Handler(Looper.getMainLooper())
+            )
+        }.onFailure { toast(R.string.prime_screenshot_failed) }
+    }
+
+    private fun saveScreenshotAsync(bitmap: Bitmap) {
+        Thread {
+            val name = runCatching { saveBitmapToGallery(bitmap) }.getOrNull()
+            Handler(Looper.getMainLooper()).post {
+                if (name != null) {
+                    toast(getString(R.string.prime_screenshot_saved, name))
+                } else {
+                    toast(R.string.prime_screenshot_failed)
+                }
+            }
+        }.start()
+    }
+
+    private fun saveBitmapToGallery(bitmap: Bitmap): String {
+        val name = "PrimeTube_" +
+            SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".jpg"
+        val resolver = context.contentResolver
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/PrimeTube")
+            }
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IOException("gallery insert failed")
+            resolver.openOutputStream(uri)?.use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)
+            } ?: throw IOException("output stream failed")
+            return getString(R.string.prime_screenshot_folder)
+        } else {
+            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "PrimeTube")
+            if (!dir.exists() && !dir.mkdirs()) throw IOException("mkdirs failed")
+            val file = File(dir, name)
+            FileOutputStream(file).use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)
+            }
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(file.absolutePath),
+                arrayOf("image/jpeg"),
+                null
+            )
+            return file.absolutePath
+        }
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun toast(resId: Int) {
+        Toast.makeText(context, resId, Toast.LENGTH_SHORT).show()
     }
 
     private fun updateAutoplayState() {
@@ -1254,8 +1508,15 @@ class CustomExoPlayerView(
 
     override fun onSingleTap(areControlsLocked: Boolean) {
         if (areControlsLocked) {
-            // keep showing the 'locked' icon
-            toggleController(true)
+            // PrimeTube: locked - pulse the lock pill, never reveal the controls
+            lockIndicator?.animate()
+                ?.scaleX(1.2f)?.scaleY(1.2f)
+                ?.setDuration(120)
+                ?.withEndAction {
+                    lockIndicator?.animate()?.scaleX(1f)?.scaleY(1f)
+                        ?.setDuration(120)?.start()
+                }
+                ?.start()
             return
         }
         toggleController()
@@ -1521,6 +1782,9 @@ class CustomExoPlayerView(
         private const val HIDE_FORWARD_BUTTON_TOKEN = "hideForwardButton"
         private const val HIDE_REWIND_BUTTON_TOKEN = "hideRewindButton"
         private const val UPDATE_POSITION_TOKEN = "updatePosition"
+
+        /** PrimeTube: handler token of the A-B repeat polling loop. */
+        private const val AB_REPEAT_TOKEN = "primeAbRepeat"
 
         private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.158f
         private const val ANIMATION_DURATION = 100L

@@ -71,4 +71,16 @@
     <string name="prime_go">যান</string>
     <string name="prime_channel_invalid">এই নম্বরে কোনো চ্যানেল নেই</string>
     <string name="prime_live_reconnected">ইন্টারনেট ফিরেছে - আবার চালু হচ্ছে…</string>
+    <string name="prime_ab_repeat">A-B রিপিট</string>
+    <string name="prime_ab_a_set">শুরু %1$s সেট হয়েছে - শেষ পয়েন্টের জন্য আবার চাপুন</string>
+    <string name="prime_ab_loop_on">A-B লুপ চালু (%1$s - %2$s)</string>
+    <string name="prime_ab_reset">A-B লুপ বন্ধ</string>
+    <string name="prime_ab_too_short">খুব ছোট - একটু এগিয়ে শেষ পয়েন্ট দিন</string>
+    <string name="prime_screenshot">স্ক্রিনশট</string>
+    <string name="prime_screenshot_saved">স্ক্রিনশট সেভ হয়েছে %1$s-এ</string>
+    <string name="prime_screenshot_failed">স্ক্রিনশট নেওয়া যায়নি</string>
+    <string name="prime_screenshot_folder">Pictures/PrimeTube</string>
+    <string name="prime_lock_controls">স্ক্রিন লক</string>
+    <string name="prime_lock_on">স্ক্রিন লক হয়েছে - আনলকে লক বাটনে চাপুন</string>
+    <string name="prime_lock_off">স্ক্রিন আনলক হয়েছে</string>
 </resources>
