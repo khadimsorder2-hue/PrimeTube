@@ -176,6 +176,15 @@ class MainActivity : AbstractPlayerHostActivity() {
         // set the action bar for the activity
         setSupportActionBar(binding.toolbar)
 
+        // PrimeTube: premium entrance animation right after the splash
+        val interpolator = android.view.animation.DecelerateInterpolator(1.4f)
+        binding.root.alpha = 0.3f
+        binding.root.animate().alpha(1f).setDuration(280)
+            .setInterpolator(interpolator).start()
+        binding.bottomNav.translationY = 120f
+        binding.bottomNav.animate().translationY(0f).setDuration(360)
+            .setStartDelay(80).setInterpolator(interpolator).start()
+
         val navHostFragment = binding.fragment.getFragment<NavHostFragment>()
         navController = navHostFragment.navController
         binding.bottomNav.setupWithNavController(navController)
