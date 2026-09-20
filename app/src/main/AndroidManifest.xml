@@ -52,17 +52,6 @@
             android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation|uiMode" />
 
         <!-- PrimeTube: background playback service for Live TV (mini bar support) -->
-        <service
-            android:name=".services.LiveTvPlaybackService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback">
-
-            <intent-filter>
-                <action android:name="androidx.media3.session.MediaSessionService"/>
-            </intent-filter>
-
-        </service>
 
         <activity
             android:name=".ui.activities.SettingsActivity"

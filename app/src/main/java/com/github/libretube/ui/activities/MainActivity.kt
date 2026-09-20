@@ -26,17 +26,10 @@ import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.onNavDestinationSelected
 import androidx.navigation.ui.setupWithNavController
-import androidx.core.view.isVisible
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
 import androidx.recyclerview.widget.RecyclerView
 import com.github.libretube.BuildConfig
 import com.github.libretube.NavDirections
 import com.github.libretube.R
-import com.github.libretube.helpers.BackgroundHelper
-import com.github.libretube.helpers.ImageHelper
-import com.github.libretube.helpers.LiveTvState
-import com.github.libretube.services.LiveTvPlaybackService
 import com.github.libretube.compat.PictureInPictureCompat
 import com.github.libretube.constants.IntentData
 import com.github.libretube.constants.PreferenceKeys
@@ -122,9 +115,6 @@ class MainActivity : AbstractPlayerHostActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        // PrimeTube: Live TV mini bar (YouTube-like background playback)
-        setupLiveTvMiniBar()
 
         // manually apply additional padding for edge-to-edge compatibility
         // see https://developer.android.com/develop/ui/views/layout/edge-to-edge
@@ -627,74 +617,6 @@ class MainActivity : AbstractPlayerHostActivity() {
 
         return item.onNavDestinationSelected(navController)
     }
-
-    /**
-     * PrimeTube: Live TV mini bar. Shown whenever the LiveTvPlaybackService is
-     * playing a channel in the background (like the YouTube mini player):
-     * tap = open the player again, toggle = play/pause, close = stop.
-     */
-    private fun setupLiveTvMiniBar() {
-        binding.liveMiniToggle.setOnClickListener {
-            liveTvController?.let { c -> if (c.isPlaying) c.pause() else c.play() }
-        }
-        binding.liveMiniClose.setOnClickListener {
-            liveTvController?.stop()
-            runCatching {
-                stopService(Intent(applicationContext, LiveTvPlaybackService::class.java))
-            }
-            LiveTvState.isActive = false
-            binding.liveMiniBar.isVisible = false
-        }
-        binding.liveMiniBar.setOnClickListener {
-            // no extras - the player resumes from the running session
-            startActivity(Intent(this, LiveTVPlayerActivity::class.java))
-        }
-    }
-
-    private fun updateLiveTvMiniBar() {
-        binding.liveMiniBar.isVisible = LiveTvState.isActive
-        if (!LiveTvState.isActive) return
-
-        binding.liveMiniTitle.text =
-            LiveTvState.channelName ?: getString(R.string.prime_live_tv)
-        LiveTvState.channelLogo?.let { ImageHelper.loadImage(it, binding.liveMiniLogo) }
-
-        if (liveTvController == null && !liveTvConnecting) {
-            liveTvConnecting = true
-            BackgroundHelper.startMediaService(
-                applicationContext,
-                LiveTvPlaybackService::class.java
-            ) { c ->
-                liveTvConnecting = false
-                liveTvController = c
-                c.addListener(object : Player.Listener {
-                    override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        runOnUiThread {
-                            binding.liveMiniToggle.setImageResource(
-                                if (isPlaying) R.drawable.ic_pause_filled else R.drawable.ic_play_filled
-                            )
-                        }
-                    }
-                })
-                runOnUiThread { updateLiveTvMiniBar() }
-            }
-        } else {
-            liveTvController?.let { c ->
-                binding.liveMiniToggle.setImageResource(
-                    if (c.isPlaying) R.drawable.ic_pause_filled else R.drawable.ic_play_filled
-                )
-            }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        // binding can be uninitialized when onCreate exited early (no internet)
-        if (::binding.isInitialized) updateLiveTvMiniBar()
-    }
-
-    private var liveTvController: MediaController? = null
-    private var liveTvConnecting = false
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()

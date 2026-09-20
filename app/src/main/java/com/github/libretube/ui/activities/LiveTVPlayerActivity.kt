@@ -17,26 +17,26 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.session.MediaController
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.github.libretube.R
 import com.github.libretube.databinding.ActivityLiveTvPlayerBinding
-import com.github.libretube.helpers.BackgroundHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.LiveTvHelper
-import com.github.libretube.helpers.LiveTvState
 import com.github.libretube.helpers.NetworkHelper
 import com.github.libretube.ui.adapters.LiveTVAdapter
 import com.github.libretube.ui.models.LiveChannel
 import com.github.libretube.ui.views.SafeLinearLayoutManager
-import com.github.libretube.services.LiveTvPlaybackService
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -44,9 +44,12 @@ import kotlin.math.roundToInt
 /**
  * PrimeTube: YouTube-like player for the Live TV (IPTV) channels.
  *
- * - playback runs in [com.github.libretube.services.LiveTvPlaybackService] so
- *   leaving the activity keeps the channel playing (mini bar in MainActivity)
- * - prev/next channel, playlist side panel, quality dialog (HLS tracks),
+ * PrimeTube rule: Live TV never plays in the background. The player is owned
+ * by this activity and is fully released in [onStop], so leaving the screen
+ * (home tab, app switch, screen off) always stops the stream - no service,
+ * no mini bar, no notification.
+ *
+ * - prev/next channel, channels side panel, quality dialog (HLS tracks),
  *   fill/fit toggle, brightness/volume swipe gestures
  * - on error: retry twice, then automatically switch to the next channel
  * - without internet: overlay + no playback
@@ -56,7 +59,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private var _binding: ActivityLiveTvPlayerBinding? = null
     private val binding get() = _binding!!
 
-    private var controller: MediaController? = null
+    private var player: ExoPlayer? = null
     private var channels: List<LiveChannel> = emptyList()
     private var currentIndex = -1
     private var errorRetries = 0
@@ -65,6 +68,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private var autoHops = 0
     private var isFillMode = true
     private var lockedQualityHeight = Int.MAX_VALUE
+
+    /** PrimeTube: set once a channel really started, so onResume can restart it. */
+    private var everStarted = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var queueAdapter: LiveTVAdapter? = null
@@ -96,7 +102,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                 toast(getString(R.string.prime_live_retrying, errorRetries))
                 handler.postDelayed({
                     if (_binding == null) return@postDelayed
-                    controller?.let {
+                    player?.let {
                         it.prepare()
                         it.play()
                     }
@@ -140,6 +146,33 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 
+    /**
+     * PrimeTube: activity-owned ExoPlayer with an IPTV hardened HTTP stack.
+     * Cross-protocol redirects are essential (many IPTV origins redirect
+     * http<->https), the browser-ish User-Agent bypasses simple UA filters.
+     */
+    private fun buildPlayer(): ExoPlayer {
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(USER_AGENT)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(12_000)
+            .setReadTimeoutMs(12_000)
+
+        return ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                /* handleAudioFocus = */ true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            .build()
+            .also { it.addListener(playerListener) }
+    }
+
     private fun loadChannelsAndStart() {
         val startName = intent.getStringExtra(EXTRA_NAME)
         val startUrl = intent.getStringExtra(EXTRA_URL)
@@ -164,69 +197,20 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     ?: cached.indexOfFirst { it.url == startUrl }.takeIf { it >= 0 }
                     ?: 0
             }
-            connectToService()
+            if (player == null) player = buildPlayer()
+            if (currentIndex !in channels.indices) currentIndex = 0
+            playChannel(currentIndex)
         }
-    }
-
-    private fun connectToService() {
-        if (controller != null) {
-            startOrResume()
-            return
-        }
-        BackgroundHelper.startMediaService(
-            applicationContext,
-            LiveTvPlaybackService::class.java
-        ) { c ->
-            // PrimeTube fix: the callback of startMediaService runs on a
-            // background executor. Touching views from there crashes with
-            // CalledFromWrongThreadException, so everything is marshalled
-            // to the main thread first.
-            handler.post {
-                val b = _binding ?: return@post
-                this.controller = c
-                c.addListener(playerListener)
-
-                // PrimeTube fix (the big one): the controller was never
-                // attached to the PlayerView, so no video ever rendered and
-                // the controls stayed dead. This line makes the picture and
-                // the YouTube-like UI appear.
-                b.livePlayerView.player = c
-                b.livePlayerView.controllerShowTimeoutMs = 3500
-                startOrResume()
-            }
-        }
-    }
-
-    /** Continue the already playing session (mini bar -> full player) or start the clicked channel. */
-    private fun startOrResume() {
-        val c = controller ?: return
-        val current = c.currentMediaItem
-        if (current != null && c.playbackState != Player.STATE_IDLE &&
-            c.mediaMetadata.extras?.getInt(EXTRA_INDEX, -1) != -1
-        ) {
-            // resume UI sync with the session that is already playing
-            currentIndex = c.mediaMetadata.extras?.getInt(EXTRA_INDEX, currentIndex) ?: currentIndex
-            binding.liveTitle.text = c.mediaMetadata.title
-            updateHeaderLogo()
-            syncQueueHighlight()
-            return
-        }
-        if (currentIndex !in channels.indices) currentIndex = 0
-        playChannel(currentIndex)
     }
 
     private fun playChannel(index: Int, autoHop: Boolean = false) {
-        val c = controller ?: return
+        val p = player ?: return
         val channel = channels.getOrNull(index) ?: return
         currentIndex = index
         errorRetries = 0
         if (!autoHop) autoHops = 0
         binding.liveTitle.text = channel.name
         updateHeaderLogo()
-
-        // PrimeTube: keep the mini bar state in sync
-        LiveTvState.channelName = channel.name
-        LiveTvState.channelLogo = channel.logo
 
         // PrimeTube: without internet there is no play
         if (!NetworkHelper.isNetworkAvailable(this)) {
@@ -236,14 +220,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveNoInternet.isGone = true
         binding.livePlayerError.isGone = true
 
-        val extras = Bundle().apply {
-            putInt(EXTRA_INDEX, index)
-            putString(EXTRA_LOGO, channel.logo)
-        }
         val metadata = MediaMetadata.Builder()
             .setTitle(channel.name)
             .setArtist(getString(R.string.prime_live_tv))
-            .setExtras(extras)
             .build()
 
         val builder = MediaItem.Builder()
@@ -251,15 +230,15 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             .setMediaMetadata(metadata)
         if (channel.url.contains(".m3u8")) builder.setMimeType(MimeTypes.APPLICATION_M3U8)
 
-        c.setMediaItem(builder.build())
-        c.prepare()
-        c.play()
+        p.setMediaItem(builder.build())
+        p.prepare()
+        p.play()
+        everStarted = true
         syncQueueHighlight()
     }
 
     private fun updateHeaderLogo() {
         val logo = channels.getOrNull(currentIndex)?.logo
-            ?: controller?.mediaMetadata?.extras?.getString(EXTRA_LOGO)
         if (logo != null) ImageHelper.loadImage(logo, binding.liveLogo)
     }
 
@@ -276,7 +255,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         }
         binding.liveNoInternet.isGone = true
         binding.livePlayerError.isGone = true
-        controller?.let {
+        player?.let {
             it.prepare()
             it.play()
         }
@@ -285,7 +264,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private fun showNoInternet() {
         binding.liveNoInternet.isVisible = true
         binding.livePlayerError.isGone = true
-        controller?.pause()
+        player?.pause()
         toast(R.string.prime_live_no_internet)
     }
 
@@ -304,8 +283,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     // ---------- quality ----------
 
     private fun showQualityDialog() {
-        val c = controller ?: return
-        val available = c.currentTracks.groups
+        val p = player ?: return
+        val available = p.currentTracks.groups
             .filter { it.type == C.TRACK_TYPE_VIDEO && it.length > 0 }
             .flatMap { group -> (0 until group.length).map { group.getTrackFormat(it).height } }
             .filter { it > 0 }
@@ -326,7 +305,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             .setTitle(R.string.quality)
             .setSingleChoiceItems(options.toTypedArray(), checked) { dialog, which ->
                 lockedQualityHeight = if (which == 0) Int.MAX_VALUE else available[which - 1]
-                c.trackSelectionParameters = c.trackSelectionParameters
+                p.trackSelectionParameters = p.trackSelectionParameters
                     .buildUpon()
                     .setMaxVideoSize(Int.MAX_VALUE, lockedQualityHeight)
                     .build()
@@ -455,20 +434,41 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         Toast.makeText(this, resId, Toast.LENGTH_SHORT).show()
     }
 
+    // ---------- lifecycle: no background playback, ever ----------
+
+    override fun onResume() {
+        super.onResume()
+        // returning to a released screen (recents/app switch): restart the
+        // live stream - live TV always resumes at the live edge anyway
+        if (player == null && everStarted) {
+            player = buildPlayer()
+            playChannel(currentIndex)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // PrimeTube rule: leaving the player = playback stops completely
+        player?.release()
+        player = null
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
-        controller?.removeListener(playerListener)
-        // PrimeTube: only the connection is closed - the channel keeps
-        // playing in LiveTvPlaybackService (mini bar in MainActivity).
-        controller?.release()
-        controller = null
+        player?.release()
+        player = null
         _binding = null
     }
 
     companion object {
         /** PrimeTube: stop auto-hopping after this many dead channels in a row. */
         private const val MAX_AUTO_HOPS = 4
+
+        /** PrimeTube: browser-like UA so IPTV servers with UA filters let us through. */
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/124.0 Mobile Safari/537.36 PrimeTube/1.0"
 
         const val EXTRA_NAME = "live_tv_name"
         const val EXTRA_URL = "live_tv_url"
