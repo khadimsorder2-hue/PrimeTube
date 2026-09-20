@@ -131,7 +131,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
         override fun onPlayerError(error: PlaybackException) {
             // PrimeTube: auto-recover from "source error" - expired stream URLs are
             // the usual culprit. Re-fetch the streams and resume where it stopped.
-            if (sourceErrorRetries < SOURCE_ERROR_MAX_RETRIES && this@OnlinePlayerService::videoId.isInitialized) {
+            if (sourceErrorRetries < SOURCE_ERROR_MAX_RETRIES && isVideoIdReady()) {
                 sourceErrorRetries++
                 sourceErrorRecovery = true
                 isPrimeRecovering = true

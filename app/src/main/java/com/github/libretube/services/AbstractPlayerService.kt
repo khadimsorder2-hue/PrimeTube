@@ -78,6 +78,10 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
     lateinit var videoId: String
 
+    /** PrimeTube: lateinit checks must live in this class (inherited lateinit
+     * properties cannot be checked with ::videoId.isInitialized outside). */
+    protected fun isVideoIdReady(): Boolean = ::videoId.isInitialized
+
     var isTransitioning = false
         protected set
 
