@@ -1717,11 +1717,11 @@ class CustomExoPlayerView(
     fun setAiSubtitleCues(cues: List<GeminiSubtitleHelper.AiCue>) {
         aiCues = cues
         aiSubtitleView.isVisible = false
-        runCatching {
-            player?.trackSelectionParameters = player?.trackSelectionParameters
-                ?.buildUpon()
-                ?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                ?.build()
+        player?.let { p ->
+            p.trackSelectionParameters = p.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
         }
     }
 
@@ -1729,11 +1729,11 @@ class CustomExoPlayerView(
     fun clearAiSubtitles() {
         aiCues = emptyList()
         aiSubtitleView.isVisible = false
-        runCatching {
-            player?.trackSelectionParameters = player?.trackSelectionParameters
-                ?.buildUpon()
-                ?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                ?.build()
+        player?.let { p ->
+            p.trackSelectionParameters = p.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .build()
         }
     }
 

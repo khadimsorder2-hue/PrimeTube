@@ -19,7 +19,6 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -250,12 +249,6 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         setContentView(binding.root)
         hideSystemBars()
 
-        // PrimeTube: TV devices (D-pad remotes) - TextureView renders far more
-        // reliably on TV panels than SurfaceView (no blank video after resume)
-        if (isTvDevice()) {
-            binding.livePlayerView.setVideoTextureView(TextureView(this))
-        }
-
         binding.liveBack.setOnClickListener { finish() }
         binding.livePrev.setOnClickListener { skipChannel(-1) }
         binding.liveNext.setOnClickListener { skipChannel(+1) }
@@ -339,7 +332,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             }
             _binding?.liveQueueChip?.text =
                 getString(R.string.prime_chip_channels) + " \u00b7 " + channels.size
-            if (player == null) player = buildPlayer()
+            if (player == null) {
+                player = buildPlayer()
+            }
+            // PrimeTube: THE critical wiring - the ExoPlayer must be attached
+            // to the PlayerView or the video surface stays black forever
+            binding.livePlayerView.player = player
             if (currentIndex !in channels.indices) currentIndex = 0
             playChannel(currentIndex)
         }
@@ -845,6 +843,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         // live stream - live TV always resumes at the live edge anyway
         if (player == null && everStarted) {
             player = buildPlayer()
+            binding.livePlayerView.player = player
             playChannel(currentIndex)
         }
     }
@@ -852,6 +851,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         // PrimeTube rule: leaving the player = playback stops completely
+        binding.livePlayerView.player = null
         player?.release()
         player = null
     }
