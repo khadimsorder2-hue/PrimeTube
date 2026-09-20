@@ -67,7 +67,7 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
         alreadyRead: Long,
         readLimit: Long?
     ): ResponseBody? {
-        val limit = readLimit?.let {
+        val limit = readLimit?.takeIf { it > 0 }?.let {
             min(readLimit, alreadyRead + BYTES_PER_REQUEST)
         }?.toString().orEmpty()
 

@@ -425,8 +425,8 @@ class CustomExoPlayerView(
         time.text = if (hasDuration) {
             primeMsToTime(p.currentPosition) + " / " + primeMsToTime(duration)
         } else {
-            // live stream - no duration, no slider, just keep it clean
-            ""
+            // live stream - no duration, no slider, just a small LIVE badge
+            "LIVE"
         }
     }
 

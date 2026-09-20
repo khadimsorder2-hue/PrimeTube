@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Rational
 import android.text.InputType
 import android.view.Gravity
 import android.view.KeyEvent
@@ -42,6 +43,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -49,6 +51,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.github.libretube.R
+import com.github.libretube.compat.PictureInPictureCompat
+import com.github.libretube.compat.PictureInPictureParamsCompat
 import com.github.libretube.databinding.ActivityLiveTvPlayerBinding
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.LiveTvHelper
@@ -271,6 +275,20 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                 // controls pinned - buffering must not pop the overlay up
                 val reallyPaused = player?.playWhenReady == false
                 if (reallyPaused) setControlsVisible(true)
+            }
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            super.onVideoSizeChanged(videoSize)
+            // PrimeTube: keep the PiP window matching the stream aspect ratio so
+            // resizing stays smooth and the picture never gets letterboxed
+            if (isPipAvailable && _binding != null) {
+                runCatching {
+                    PictureInPictureCompat.setPictureInPictureParams(
+                        this@LiveTVPlayerActivity,
+                        primePipParams()
+                    )
+                }
             }
         }
 
@@ -971,6 +989,56 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     private fun toast(resId: Int) {
         Toast.makeText(this, resId, Toast.LENGTH_SHORT).show()
+    }
+
+    // ---------- PrimeTube: picture-in-picture for Live TV ----------
+
+    private val isPipAvailable: Boolean
+        get() = PictureInPictureCompat.isPictureInPictureAvailable(this)
+
+    /**
+     * PrimeTube: a clean Live TV PiP window - just the video, aspect ratio
+     * matched to the stream, auto-enter while playing.
+     */
+    private fun primePipParams(): PictureInPictureParamsCompat {
+        val builder = PictureInPictureParamsCompat.Builder()
+            .setAutoEnterEnabled(player?.isPlaying == true)
+        val videoSize = player?.videoSize
+        if (videoSize != null && videoSize.width > 0 && videoSize.height > 0) {
+            builder.setAspectRatio(videoSize)
+        } else {
+            builder.setAspectRatio(Rational(16, 9))
+        }
+        return builder.build()
+    }
+
+    private fun enterPipIfPlaying() {
+        if (!isPipAvailable || player?.isPlaying != true) return
+        runCatching {
+            PictureInPictureCompat.enterPictureInPictureMode(this, primePipParams())
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // PrimeTube: leaving the app while a channel is playing -> keep
+        // watching in the floating PiP window
+        enterPipIfPlaying()
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (isInPictureInPictureMode) {
+            // clean floating window: no overlays, no panels, no keypad
+            setControlsVisible(false)
+            numberKeypadDialog?.dismiss()
+            _binding?.liveQueueRoot?.isGone = true
+            _binding?.liveGesturePill?.isGone = true
+        } else if (_binding != null && player != null) {
+            // back in fullscreen (the window was expanded) - show the controls
+            // again briefly; a dismissed window just finishes the activity
+            setControlsVisible(true)
+        }
     }
 
     // ---------- lifecycle: no background playback, ever ----------

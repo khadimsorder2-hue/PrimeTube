@@ -56,6 +56,7 @@
             android:label="@string/prime_live_tv"
             android:launchMode="singleTop"
             android:screenOrientation="sensorLandscape"
+            android:supportsPictureInPicture="true"
             android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation|uiMode" />
 
         <!-- PrimeTube: background playback service for Live TV (mini bar support) -->
