@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: paths shared with the system package installer for the
+     in-app update APK -->
+<paths>
+    <external-files-path
+        name="prime_update"
+        path="prime_update/" />
+    <cache-path
+        name="prime_update_cache"
+        path="prime_update/" />
+</paths>

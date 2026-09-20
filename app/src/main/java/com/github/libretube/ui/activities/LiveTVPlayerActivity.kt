@@ -43,6 +43,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -127,6 +128,60 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     /** PrimeTube: set after a playback error, cleared on STATE_READY. */
     private var hadPlaybackError = false
 
+    // PrimeTube: live-smoothness watchdog - a stream that buffers too long is
+    // nudged back to the live edge instead of freezing forever
+    private var bufferingSince = -1L
+    private var bufferingRecoveries = 0
+    private var lastReadyAt = 0L
+    private val bufferingWatchdog = object : Runnable {
+        override fun run() {
+            val p = player
+            if (_binding != null && p != null &&
+                bufferingSince > 0 &&
+                p.playbackState == Player.STATE_BUFFERING &&
+                p.playWhenReady
+            ) {
+                val stuckMs = System.currentTimeMillis() - bufferingSince
+                if (stuckMs > STUCK_BUFFER_MS) {
+                    // a channel that became READY long ago deserves more
+                    // recovery attempts than one that never stabilized
+                    if (lastReadyAt > 0 &&
+                        System.currentTimeMillis() - lastReadyAt > RECOVERY_RESET_MS
+                    ) {
+                        bufferingRecoveries = 0
+                    }
+                    bufferingRecoveries++
+                    when {
+                        bufferingRecoveries <= 2 -> {
+                            // light recovery: jump back to the live edge
+                            toast(R.string.prime_live_recovering)
+                            bufferingSince = System.currentTimeMillis()
+                            p.seekToDefaultPosition()
+                            p.prepare()
+                            p.play()
+                        }
+
+                        bufferingRecoveries <= 4 -> {
+                            // hard recovery: reload the same channel
+                            toast(R.string.prime_live_recovering)
+                            bufferingSince = System.currentTimeMillis()
+                            playChannel(currentIndex)
+                        }
+
+                        else -> {
+                            // give up on this channel like on a playback error
+                            bufferingRecoveries = 0
+                            bufferingSince = -1L
+                            toast(R.string.prime_live_retry_next)
+                            skipChannel(+1, autoHop = true)
+                        }
+                    }
+                }
+            }
+            handler.postDelayed(this, WATCHDOG_TICK_MS)
+        }
+    }
+
     // gesture state
     private var gestureActive = false
     private var gestureBrightness = false
@@ -137,14 +192,29 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_READY) {
-                errorRetries = 0
-                autoHops = 0
-                hadPlaybackError = false
-                _binding?.livePlayerError?.isVisible = false
-                _binding?.liveNoInternet?.isGone = true
-                _binding?.liveErrorDetail?.isGone = true
-                syncQueueHighlight()
+            when (playbackState) {
+                Player.STATE_READY -> {
+                    errorRetries = 0
+                    autoHops = 0
+                    hadPlaybackError = false
+                    bufferingSince = -1L
+                    lastReadyAt = System.currentTimeMillis()
+                    _binding?.livePlayerError?.isVisible = false
+                    _binding?.liveNoInternet?.isGone = true
+                    _binding?.liveErrorDetail?.isGone = true
+                    syncQueueHighlight()
+                    // PrimeTube: never stay paused silently - if the user asked
+                    // for playback and we are READY, make sure it really plays
+                    player?.let { p ->
+                        if (p.playWhenReady && !p.isPlaying) p.play()
+                    }
+                }
+
+                Player.STATE_BUFFERING -> {
+                    // PrimeTube: stamp the start so the watchdog can act when
+                    // the buffer never recovers on its own
+                    if (bufferingSince <= 0) bufferingSince = System.currentTimeMillis()
+                }
             }
         }
 
@@ -161,8 +231,10 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                 // playing again -> controls may hide after the timeout
                 if (controlsVisible) setControlsVisible(true)
             } else {
-                // paused -> keep the controls on screen (YouTube behavior)
-                setControlsVisible(true)
+                // PrimeTube: only a REAL pause (user or system) keeps the
+                // controls pinned - buffering must not pop the overlay up
+                val reallyPaused = player?.playWhenReady == false
+                if (reallyPaused) setControlsVisible(true)
             }
         }
 
@@ -271,6 +343,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
         setupGestures()
         registerNetworkWatcher()
+        handler.post(bufferingWatchdog)
         loadChannelsAndStart()
     }
 
@@ -300,14 +373,31 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             .setConnectTimeoutMs(12_000)
             .setReadTimeoutMs(12_000)
 
+        // PrimeTube: IPTV-tuned buffering - a big min/max buffer plus a much
+        // larger rebuffer threshold keeps choppy live streams from starting
+        // and stalling every 1-2 seconds
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 50_000,
+                /* maxBufferMs = */ 90_000,
+                /* bufferForPlaybackMs = */ 3_500,
+                /* bufferForPlaybackAfterRebufferMs = */ 8_000
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .setBackBuffer(60_000, /* retainBackBufferFromKeyframe = */ true)
+            .build()
+
         return ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setLoadControl(loadControl)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                     .build(),
-                /* handleAudioFocus = */ true
+                // PrimeTube: ignore audio focus losses - a notification or
+                // another app must never pause the live stream
+                /* handleAudioFocus = */ false
             )
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
@@ -358,6 +448,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         currentIndex = index
         errorRetries = 0
         mimeFallbackTried = false
+        bufferingSince = -1L
+        bufferingRecoveries = 0
+        lastReadyAt = 0L
         if (!autoHop) autoHops = 0
         binding.liveTitle.text = channel.name
         updateHeaderLogo()
@@ -879,6 +972,15 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     companion object {
         /** PrimeTube: stop auto-hopping after this many dead channels in a row. */
         private const val MAX_AUTO_HOPS = 4
+
+        /** PrimeTube: buffering longer than this triggers the watchdog. */
+        private const val STUCK_BUFFER_MS = 8_000L
+
+        /** PrimeTube: watchdog poll interval. */
+        private const val WATCHDOG_TICK_MS = 2_000L
+
+        /** PrimeTube: a channel READY for this long gets its recovery budget back. */
+        private const val RECOVERY_RESET_MS = 20_000L
 
         /** PrimeTube: controls auto-hide timeout (YouTube uses ~3-5 s). */
         private const val CONTROLS_TIMEOUT_MS = 5_000L

@@ -403,4 +403,17 @@
     <string name="chapters_videoHighlight">ভিডিও হাইলাইট</string>
     <string name="player_channel_name">প্লেয়ার সার্ভিস</string>
     <string name="player_channel_description">ভিডিও চলার সময় একটি বিজ্ঞপ্তি দেখায়</string>
+
+    <!-- PrimeTube: Live TV recovery -->
+    <string name="prime_live_recovering">স্ট্রিম দুর্বল — ঠিক করা হচ্ছে…</string>
+
+    <!-- PrimeTube in-app updater -->
+    <string name="prime_update">আপডেট</string>
+    <string name="prime_update_checking">আপডেট আছে কিনা দেখা হচ্ছে…</string>
+    <string name="prime_update_available_title">নতুন ভার্সন এসেছে</string>
+    <string name="prime_update_download_install">ডাউনলোড করে ইনস্টল করুন</string>
+    <string name="prime_update_downloading">আপডেট ডাউনলোড হচ্ছে… %1$d%%</string>
+    <string name="prime_update_installing">ইনস্টলার খোলা হচ্ছে…</string>
+    <string name="prime_update_failed">আপডেট চেক করা যায়নি — ইন্টারনেট দেখুন</string>
+    <string name="prime_update_no_apk">সর্বশেষ রিলিজে কোনো APK পাওয়া যায়নি</string>
 </resources>

@@ -623,6 +623,17 @@
     <string name="prime_live_no_internet">No internet connection</string>
     <string name="prime_live_retrying">Retrying… (%1$d/2)</string>
     <string name="prime_live_retry_next">Channel is not responding — switching to the next one</string>
+    <string name="prime_live_recovering">Weak stream — recovering…</string>
+
+    <!-- PrimeTube in-app updater -->
+    <string name="prime_update">Update</string>
+    <string name="prime_update_checking">Checking for updates…</string>
+    <string name="prime_update_available_title">New version available</string>
+    <string name="prime_update_download_install">Download &amp; install</string>
+    <string name="prime_update_downloading">Downloading update… %1$d%%</string>
+    <string name="prime_update_installing">Opening the installer…</string>
+    <string name="prime_update_failed">Update check failed — check the internet</string>
+    <string name="prime_update_no_apk">No APK found in the latest release</string>
     <string name="prime_live_channels">Channels</string>
     <string name="prime_live_prev_channel">Previous channel</string>
     <string name="prime_live_next_channel">Next channel</string>

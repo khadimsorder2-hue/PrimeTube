@@ -21,4 +21,12 @@
         android:title="@string/about"
         app:showAsAction="never" />
 
+    <!-- PrimeTube: in-app updater - downloads the latest release APK and
+         installs it over the running app -->
+    <item
+        android:id="@+id/action_update"
+        android:icon="@drawable/ic_update"
+        android:title="@string/prime_update"
+        app:showAsAction="never" />
+
 </menu>

@@ -28,6 +28,7 @@ object IntentData {
     const val duration = "duration"
     const val appUpdateChangelog = "updateChangelog"
     const val appUpdateURL = "updateURL"
+    const val appUpdateTag = "updateTag"
     const val backupFile = "backupFile"
     const val playlistTask = "playlistTask"
     const val loginTask = "loginTask"

@@ -27,11 +27,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
+        env:
+          # PrimeTube: inject the build version for the in-app updater
+          PRIMETUBE_VERSION: 32.1-dev-${{ github.run_number }}
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
       - name: Build release APK
+        env:
+          PRIMETUBE_VERSION: 32.1-dev-${{ github.run_number }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Prepare signing keystore

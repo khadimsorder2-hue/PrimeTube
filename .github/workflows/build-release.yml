@@ -23,8 +23,13 @@ jobs:
           cache: "gradle"
 
       - name: Build APK
+        env:
+          # PrimeTube: tag v32.1-buildNN -> versionName "32.1-buildNN" so the
+          # in-app updater can compare with the release tag
+          PRIMETUBE_VERSION: ${{ github.ref_name }}
         run: |
           chmod +x gradlew
+          export PRIMETUBE_VERSION="${PRIMETUBE_VERSION#v}"
           ./gradlew assembleRelease --no-daemon
 
       # PrimeTube: sign with the stable repo secrets (same keystore as the

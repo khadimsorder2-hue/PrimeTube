@@ -2,10 +2,15 @@ package com.github.libretube.ui.activities
 
 import android.content.Intent
 import android.view.MenuItem
+import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import com.github.libretube.R
 import com.github.libretube.ui.base.BaseActivity
 import com.github.libretube.ui.fragments.AudioPlayerFragment
 import com.github.libretube.ui.fragments.PlayerFragment
+import com.github.libretube.util.UpdateChecker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 abstract class AbstractPlayerHostActivity: BaseActivity() {
     abstract fun minimizePlayerContainerLayout()
@@ -47,6 +52,16 @@ abstract class AbstractPlayerHostActivity: BaseActivity() {
             R.id.action_about -> {
                 val aboutIntent = Intent(this, AboutActivity::class.java)
                 startActivity(aboutIntent)
+                true
+            }
+
+            // PrimeTube: in-app updater - check the latest GitHub release,
+            // download the APK and install it over this app
+            R.id.action_update -> {
+                Toast.makeText(this, R.string.prime_update_checking, Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    UpdateChecker(this@AbstractPlayerHostActivity).checkUpdate(true)
+                }
                 true
             }
 

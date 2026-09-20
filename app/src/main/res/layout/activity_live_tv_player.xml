@@ -100,7 +100,47 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- bottom scrim + controls: prev / play / next + chips -->
+        <!-- PrimeTube: prev / play / next dead-center like the YouTube player -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/livePrev"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
+                android:background="@drawable/prime_chip_bg"
+                android:contentDescription="@string/prime_live_prev_channel"
+                android:padding="14dp"
+                android:src="@drawable/ic_prev"
+                app:tint="@android:color/white" />
+
+            <ImageView
+                android:id="@+id/liveCenterPlay"
+                android:layout_width="84dp"
+                android:layout_height="84dp"
+                android:layout_marginHorizontal="24dp"
+                android:background="@drawable/prime_chip_bg"
+                android:contentDescription="@string/pause"
+                android:padding="20dp"
+                android:src="@drawable/ic_pause_filled"
+                app:tint="@android:color/white" />
+
+            <ImageView
+                android:id="@+id/liveNext"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
+                android:background="@drawable/prime_chip_bg"
+                android:contentDescription="@string/prime_live_next_channel"
+                android:padding="14dp"
+                android:src="@drawable/ic_next"
+                app:tint="@android:color/white" />
+        </LinearLayout>
+
+        <!-- bottom scrim + chips: fill / quality / channels / sleep -->
         <View
             android:layout_width="match_parent"
             android:layout_height="200dp"
@@ -114,44 +154,6 @@
             android:gravity="center_horizontal"
             android:orientation="vertical"
             android:paddingBottom="22dp">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <ImageView
-                    android:id="@+id/livePrev"
-                    android:layout_width="54dp"
-                    android:layout_height="54dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/prime_live_prev_channel"
-                    android:padding="12dp"
-                    android:src="@drawable/ic_prev"
-                    app:tint="@android:color/white" />
-
-                <ImageView
-                    android:id="@+id/liveCenterPlay"
-                    android:layout_width="80dp"
-                    android:layout_height="80dp"
-                    android:layout_marginHorizontal="26dp"
-                    android:background="@drawable/prime_chip_bg"
-                    android:contentDescription="@string/pause"
-                    android:padding="18dp"
-                    android:src="@drawable/ic_pause_filled"
-                    app:tint="@android:color/white" />
-
-                <ImageView
-                    android:id="@+id/liveNext"
-                    android:layout_width="54dp"
-                    android:layout_height="54dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/prime_live_next_channel"
-                    android:padding="12dp"
-                    android:src="@drawable/ic_next"
-                    app:tint="@android:color/white" />
-            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="wrap_content"
