@@ -104,7 +104,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     if (isPlaying) R.drawable.ic_pause_filled else R.drawable.ic_play_filled
                 )
                 b.liveCenterPlay.contentDescription = getString(
-                    if (isPlaying) R.string.pause else R.string.play
+                    if (isPlaying) R.string.pause else R.string.tooltip_play
                 )
             }
             if (isPlaying) {
