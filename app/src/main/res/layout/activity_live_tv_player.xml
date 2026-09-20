@@ -36,7 +36,6 @@
         android:scaleY="0.9"
         android:visibility="invisible"
         app:indicatorColor="#FF0033"
-        app:indicatorLineWidth="4dp"
         app:indicatorSize="44dp" />
 
     <!-- PrimeTube: the full control overlay, hidden until the user taps -->
