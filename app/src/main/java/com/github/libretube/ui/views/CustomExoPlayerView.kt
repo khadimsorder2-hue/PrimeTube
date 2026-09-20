@@ -15,7 +15,6 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.provider.MediaStore
 import android.text.format.DateUtils
 import android.util.AttributeSet
@@ -25,6 +24,7 @@ import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewParent
 import android.view.Window
@@ -189,9 +189,9 @@ class CustomExoPlayerView(
     private var subtitleOffsetFraction = PlayerHelper.primeSubtitleOffset
     private var subtitleTextScale = PlayerHelper.primeSubtitleScale
     private var subtitleTouchActive = false
+    private var subtitleGestureTaken = false
     private var subtitleDragStartY = 0f
     private var subtitleDragStartOffset = 0f
-    private var lastSubtitleTapTime = 0L
     private val subtitleScaleDetector = ScaleGestureDetector(
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -266,6 +266,25 @@ class CustomExoPlayerView(
         return runCatching {
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         }.getOrDefault(false)
+    }
+
+    /**
+     * PrimeTube: pre-dispatch hook for the activity - guarantees the remote's
+     * OK / up / down always opens the control bar, even if some other focused
+     * view in the hierarchy would swallow the key.
+     */
+    fun handleTvKeyPreDispatch(keyCode: Int): Boolean {
+        if (!isTvDevice || isControllerFullyVisible) return false
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                showTvControls()
+                true
+            }
+            else -> false
+        }
     }
 
     private var playerViewModel: PlayerViewModel? = null
@@ -1654,13 +1673,16 @@ class CustomExoPlayerView(
 
     /**
      * PrimeTube: free-form subtitle gestures. A touch that starts on the
-     * visible caption area drags the subtitles vertically instead of
-     * triggering the normal player gestures - two fingers pinch-resize.
+     * visible caption area can drag the subtitles vertically or pinch-resize
+     * them - but ONLY after the finger really moves. Plain taps are never
+     * consumed so the controls always open, even on top of the captions.
      */
     private fun handleSubtitleTouch(event: MotionEvent): Boolean {
         val subtitleView = subtitleView ?: return false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                subtitleTouchActive = false
+                subtitleGestureTaken = false
                 if (subtitleView.childCount == 0 || subtitleView.visibility != View.VISIBLE) {
                     return false
                 }
@@ -1669,53 +1691,79 @@ class CustomExoPlayerView(
                 rect.inset(-48f, -36f)
                 if (!rect.contains(event.x, event.y)) return false
 
+                // PrimeTube: only arm the subtitle gesture here - the event is
+                // deliberately passed through so a tap still toggles controls
                 subtitleTouchActive = true
                 subtitleDragStartY = event.y
                 subtitleDragStartOffset = subtitleOffsetFraction
-
-                // PrimeTube: double tap on the subtitles resets position + size
-                val now = SystemClock.uptimeMillis()
-                if (now - lastSubtitleTapTime < 300) {
-                    subtitleOffsetFraction = 0f
-                    subtitleTextScale = 1f
-                    applySubtitleTextSize()
-                    applySubtitleTransform()
-                    persistSubtitle()
-                }
-                lastSubtitleTapTime = now
-                return true
+                return false
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                if (subtitleTouchActive) {
-                    subtitleScaleDetector.onTouchEvent(event)
-                    return true
-                }
-                return false
+                if (!subtitleTouchActive || event.pointerCount < 2) return false
+                // pinch begins: take the gesture over from the tap detector
+                sendCancelToGestureController(event)
+                subtitleGestureTaken = true
+                subtitleScaleDetector.onTouchEvent(event)
+                return true
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (!subtitleTouchActive) return false
                 subtitleScaleDetector.onTouchEvent(event)
-                if (event.pointerCount == 1 && !subtitleScaleDetector.isInProgress) {
-                    val dy = event.y - subtitleDragStartY
-                    val height = height.takeIf { it > 0 } ?: return true
-                    subtitleOffsetFraction =
-                        (subtitleDragStartOffset + dy / height).coerceIn(-0.65f, 0.06f)
-                    applySubtitleTransform()
+
+                if (!subtitleGestureTaken) {
+                    if (subtitleScaleDetector.isInProgress) {
+                        sendCancelToGestureController(event)
+                        subtitleGestureTaken = true
+                        return true
+                    }
+                    if (event.pointerCount != 1) return false
+                    val dyStart = event.y - subtitleDragStartY
+                    val slop = ViewConfiguration.get(context).scaledTouchSlop
+                    if (abs(dyStart) < slop) return false
+                    // the finger really moved: drag mode takes over, the tap
+                    // detector is cancelled so no swipe gesture fires
+                    sendCancelToGestureController(event)
+                    subtitleGestureTaken = true
                 }
+
+                if (subtitleScaleDetector.isInProgress) return true
+                if (event.pointerCount != 1) return true
+                val dy = event.y - subtitleDragStartY
+                val height = height.takeIf { it > 0 } ?: return true
+                subtitleOffsetFraction =
+                    (subtitleDragStartOffset + dy / height).coerceIn(-0.65f, 0.06f)
+                applySubtitleTransform()
                 return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (!subtitleTouchActive) return false
-                subtitleTouchActive = false
+                val wasTaken = subtitleGestureTaken
                 subtitleScaleDetector.onTouchEvent(event)
+                subtitleTouchActive = false
+                subtitleGestureTaken = false
+                if (!wasTaken) return false
                 persistSubtitle()
                 return true
             }
         }
         return false
+    }
+
+    /** PrimeTube: end the tap/gesture detection cleanly when subtitles take over. */
+    private fun sendCancelToGestureController(event: MotionEvent) {
+        MotionEvent.obtain(
+            event.downTime,
+            event.eventTime,
+            MotionEvent.ACTION_CANCEL,
+            event.x,
+            event.y,
+            event.metaState
+        ).also { cancelEvent ->
+            playerGestureController.onTouchEvent(cancelEvent)
+            cancelEvent.recycle()
+        }
     }
 
     /** PrimeTube: bounds of the drawn caption text in this view's coordinates. */
@@ -2086,6 +2134,9 @@ class CustomExoPlayerView(
         if (events.contains(Player.EVENT_RENDERED_FIRST_FRAME)) {
             // if the video is not starting automatically, show the controller
             if (!PlayerHelper.playAutomatically) showControllerPermanently()
+            // PrimeTube: like YouTube - autoplaying videos reveal the controls
+            // for a moment too, so the user always sees the controls work
+            else showController()
         }
 
         if (events.contains(Player.EVENT_RENDERED_FIRST_FRAME) && !alreadySetDefaultSubtitle) {

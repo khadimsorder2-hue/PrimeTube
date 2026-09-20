@@ -1570,9 +1570,15 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         binding.player.useController = false
 
+        val inPipMode = PictureInPictureCompat.isInPictureInPictureMode(requireActivity())
+        // PrimeTube: the controls must always be tappable while the user is
+        // actually watching - a stale motion-layout progress (e.g. after the
+        // app was killed while minimized) must never kill them again
+        val minimized = commonPlayerViewModel.isMiniPlayerVisible.value == true
+        binding.player.useController = !inPipMode && !minimized
+
         if (binding.playerMotionLayout.progress != 1.0f) {
             // show controllers when not in picture in picture mode
-            val inPipMode = PictureInPictureCompat.isInPictureInPictureMode(requireActivity())
             if (!inPipMode) {
                 binding.player.useController = true
             }
@@ -1972,6 +1978,15 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         // to the mini bar - the keys belong to the visible screen then
         if (commonPlayerViewModel.isMiniPlayerVisible.value == true) return false
         return _binding?.player?.onKeyUp(keyCode, event) ?: false
+    }
+
+    /**
+     * PrimeTube: pre-dispatch hook from the activity - guaranteed reveal of
+     * the controls on TV remotes even if another view would eat the key.
+     */
+    fun preDispatchTvKey(keyCode: Int): Boolean {
+        if (commonPlayerViewModel.isMiniPlayerVisible.value == true) return false
+        return _binding?.player?.handleTvKeyPreDispatch(keyCode) ?: false
     }
 
     override fun onDestroyView() {

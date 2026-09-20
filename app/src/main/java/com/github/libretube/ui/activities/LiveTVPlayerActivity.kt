@@ -12,6 +12,7 @@ import android.graphics.drawable.ColorDrawable
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,6 +22,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -258,7 +260,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveQualityChip.setOnClickListener { showQualityDialog() }
         binding.liveQueueChip.setOnClickListener { toggleQueuePanel() }
         binding.liveSleepChip.setOnClickListener { showSleepDialog() }
-        binding.liveNumberChip.setOnClickListener { showNumberJumpDialog() }
+        // PrimeTube: the 123 channel-number keypad is fully disabled by
+        // request - no chip, no input path
         binding.liveQueueClose.setOnClickListener {
             binding.liveQueueRoot.isGone = true
             resetChannelSearch()
@@ -273,6 +276,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     private fun hideSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // PrimeTube: draw into the camera cutout area too - fill mode must
+        // cover the whole display with no reserved notch space
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
         controller.systemBarsBehavior =

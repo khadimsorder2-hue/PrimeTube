@@ -642,6 +642,19 @@ class MainActivity : AbstractPlayerHostActivity() {
         loadIntentData()
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // PrimeTube: guarantee the remote's OK / up / down always reveals the
+        // player controls - even when some other focused view would swallow
+        // the key before it reaches the normal key fallback below
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+            ::searchItem.isInitialized && !searchItem.isActionViewExpanded
+        ) {
+            val handled = runOnPlayerFragment { preDispatchTvKey(event.keyCode) }
+            if (handled) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         // don't forward key events to the player while the search text input is used
         if (searchItem.isActionViewExpanded) return false
