@@ -664,7 +664,7 @@ class CustomExoPlayerView(
             isVisible = false
             elevation = resources.displayMetrics.density * 24
             contentDescription = context.getString(R.string.prime_lock_controls)
-            layoutParams = LayoutParams(
+            layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 android.view.Gravity.TOP or android.view.Gravity.START

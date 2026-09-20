@@ -70,17 +70,19 @@ class LiveTVFragment : Fragment(R.layout.fragment_live_tv) {
         onClick = { channel, _ ->
             // PrimeTube: resolve the index from the FULL list - the grid may be
             // sorted (favorites first), so the adapter position is not the index
-            val ctx = context ?: return@LiveTVAdapter
-            startActivity(
-                Intent(ctx, LiveTVPlayerActivity::class.java)
-                    .putExtra(
-                        LiveTVPlayerActivity.EXTRA_INDEX,
-                        fullChannels.indexOfFirst { it.url == channel.url }
-                    )
-                    .putExtra(LiveTVPlayerActivity.EXTRA_NAME, channel.name)
-                    .putExtra(LiveTVPlayerActivity.EXTRA_URL, channel.url)
-                    .putExtra(LiveTVPlayerActivity.EXTRA_LOGO, channel.logo)
-            )
+            val ctx = context
+            if (ctx != null) {
+                startActivity(
+                    Intent(ctx, LiveTVPlayerActivity::class.java)
+                        .putExtra(
+                            LiveTVPlayerActivity.EXTRA_INDEX,
+                            fullChannels.indexOfFirst { it.url == channel.url }
+                        )
+                        .putExtra(LiveTVPlayerActivity.EXTRA_NAME, channel.name)
+                        .putExtra(LiveTVPlayerActivity.EXTRA_URL, channel.url)
+                        .putExtra(LiveTVPlayerActivity.EXTRA_LOGO, channel.logo)
+                )
+            }
         },
         onFavoriteToggle = { channel -> toggleFavorite(channel) }
     )
