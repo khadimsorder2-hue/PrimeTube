@@ -357,6 +357,21 @@
             android:textColor="@android:color/white"
             android:textSize="14sp" />
 
+        <!-- PrimeTube: technical reason (e.g. ERROR_CODE_IO_...) - helps to
+             debug channels that refuse to play on some devices (TV boxes) -->
+        <TextView
+            android:id="@+id/liveErrorDetail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:alpha="0.7"
+            android:gravity="center"
+            android:maxWidth="280dp"
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="ERROR_CODE_IO_NETWORK_CONNECTION_FAILED" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/livePlayerRetry"
             android:layout_width="wrap_content"

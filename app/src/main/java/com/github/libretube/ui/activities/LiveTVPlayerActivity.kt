@@ -1,7 +1,10 @@
 package com.github.libretube.ui.activities
 
+import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Typeface
 import android.media.AudioManager
 import android.net.ConnectivityManager
@@ -11,7 +14,9 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.TextureView
 import android.view.View
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -72,6 +77,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private var currentIndex = -1
     private var errorRetries = 0
 
+    /** PrimeTube: every stream gets exactly one alternate-container retry. */
+    private var mimeFallbackTried = false
+
     /** PrimeTube: consecutive automatic channel hops caused by playback errors. */
     private var autoHops = 0
     private var isFillMode = true
@@ -125,6 +133,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                 autoHops = 0
                 hadPlaybackError = false
                 _binding?.livePlayerError?.isVisible = false
+                _binding?.liveNoInternet?.isGone = true
+                _binding?.liveErrorDetail?.isGone = true
                 syncQueueHighlight()
             }
         }
@@ -149,6 +159,20 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
         override fun onPlayerError(error: PlaybackException) {
             hadPlaybackError = true
+            _binding?.liveErrorDetail?.apply {
+                text = error.errorCodeName
+                isVisible = true
+            }
+            // PrimeTube: many IPTV servers label their streams wrongly (HLS with
+            // no .m3u8 extension or the other way around) - TV boxes are much
+            // stricter about this than phones. Retry once with the other
+            // container interpretation before giving up on the channel.
+            if (!mimeFallbackTried) {
+                mimeFallbackTried = true
+                toast(getString(R.string.prime_live_retrying, 1))
+                retryWithAlternativeMime()
+                return
+            }
             // PrimeTube: retry twice, then hop to the next channel.
             // After too many dead channels in a row, stop and show the retry
             // overlay instead of looping through the whole playlist forever.
@@ -173,11 +197,56 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** PrimeTube: Android TV / set-top-box detection for D-pad + TextureView. */
+    private fun isTvDevice(): Boolean {
+        val uiMode = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        if (uiMode?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION) return true
+        return runCatching {
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * PrimeTube: D-pad support so Live TV works on real TVs:
+     * OK = show controls (play/pause when visible), up/down = switch channel,
+     * menu = show controls, back = hide controls or leave.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (controlsVisible) togglePlayback() else setControlsVisible(true)
+                return true
+            }
+
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                skipChannel(+1)
+                return true
+            }
+
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                skipChannel(-1)
+                return true
+            }
+
+            KeyEvent.KEYCODE_MENU -> {
+                setControlsVisible(true)
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         _binding = ActivityLiveTvPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
         hideSystemBars()
+
+        // PrimeTube: TV devices (D-pad remotes) - TextureView renders far more
+        // reliably on TV panels than SurfaceView (no blank video after resume)
+        if (isTvDevice()) {
+            binding.livePlayerView.setVideoTextureView(TextureView(this))
+        }
 
         binding.liveBack.setOnClickListener { finish() }
         binding.livePrev.setOnClickListener { skipChannel(-1) }
@@ -273,16 +342,19 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         val channel = channels.getOrNull(index) ?: return
         currentIndex = index
         errorRetries = 0
+        mimeFallbackTried = false
         if (!autoHop) autoHops = 0
         binding.liveTitle.text = channel.name
         updateHeaderLogo()
 
-        // PrimeTube: without internet there is no play
+        // PrimeTube: no internet -> show the hint, but still try to play.
+        // Some TV boxes report no usable network even though the stream is
+        // reachable; a dead connection hits the error path instead.
         if (!NetworkHelper.isNetworkAvailable(this)) {
-            showNoInternet()
-            return
+            binding.liveNoInternet.isVisible = true
+        } else {
+            binding.liveNoInternet.isGone = true
         }
-        binding.liveNoInternet.isGone = true
         binding.livePlayerError.isGone = true
 
         val metadata = MediaMetadata.Builder()
@@ -293,7 +365,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         val builder = MediaItem.Builder()
             .setUri(channel.url)
             .setMediaMetadata(metadata)
-        if (channel.url.contains(".m3u8")) builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        if (channel.url.lowercase(Locale.US).contains("m3u8")) {
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
 
         p.setMediaItem(builder.build())
         p.prepare()
@@ -305,12 +379,39 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         setControlsVisible(true)
     }
 
+    /**
+     * PrimeTube: servers often mislabel IPTV containers - replay the channel
+     * once with the opposite interpretation (HLS <-> progressive).
+     */
+    private fun retryWithAlternativeMime() {
+        val p = player ?: return
+        val channel = channels.getOrNull(currentIndex) ?: return
+        val builder = MediaItem.Builder()
+            .setUri(channel.url)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(channel.name)
+                    .setArtist(getString(R.string.prime_live_tv))
+                    .build()
+            )
+        if (!channel.url.lowercase(Locale.US).contains("m3u8")) {
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
+        p.setMediaItem(builder.build())
+        p.prepare()
+        p.play()
+    }
+
     // ---------- controls overlay: nothing on screen until tapped, 5 s auto-hide ----------
 
     private fun setControlsVisible(visible: Boolean) {
         controlsVisible = visible
         _binding?.liveControlsRoot?.isVisible = visible
         handler.removeCallbacks(hideControlsRunnable)
+        // PrimeTube: on TV the D-pad needs an anchor - focus the center play
+        if (visible && isTvDevice()) {
+            _binding?.liveCenterPlay?.requestFocus()
+        }
         // auto-hide only while actually playing - paused keeps controls visible
         if (visible && player?.isPlaying == true) {
             handler.postDelayed(hideControlsRunnable, CONTROLS_TIMEOUT_MS)

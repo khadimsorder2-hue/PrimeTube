@@ -730,4 +730,18 @@
     <string name="prime_lock_controls">Lock screen</string>
     <string name="prime_lock_on">Screen locked - tap the lock pill to unlock</string>
     <string name="prime_lock_off">Screen unlocked</string>
+    <string name="prime_live_retrying_alt">Trying another stream format…</string>
+    <string name="prime_settings_subtitles">Subtitles &amp; AI translation</string>
+    <string name="prime_subtitle_transparent">Transparent subtitle background</string>
+    <string name="prime_subtitle_transparent_summary">Clean subtitles without a box behind the text. Drag subtitles up or down on the video, pinch to resize, double-tap them to reset. Default: very bottom.</string>
+    <string name="prime_ai_subtitles">AI Bangla subtitles (Gemini)</string>
+    <string name="prime_ai_subtitles_summary">Translate any video\'s subtitles to Bangla with Google Gemini. Add your API key and model below, then simply play a video - everything else runs automatically.</string>
+    <string name="prime_ai_api_key">Gemini API key</string>
+    <string name="prime_ai_key_help">Get a free API key</string>
+    <string name="prime_ai_key_help_summary">aistudio.google.com/apikey - Create API key, then paste it below</string>
+    <string name="prime_ai_model">Gemini model</string>
+    <string name="prime_ai_translating">Translating subtitles to Bangla…</string>
+    <string name="prime_ai_done">Bangla subtitles ready</string>
+    <string name="prime_ai_failed">AI subtitle translation failed - check your Gemini API key and model</string>
+    <string name="prime_ai_no_subtitles">This video has no subtitles to translate</string>
 </resources>
