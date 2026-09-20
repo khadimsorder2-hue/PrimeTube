@@ -536,6 +536,12 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         val onBackPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // PrimeTube: like YouTube - BACK first hides the visible
+                // control bar, only a second BACK leaves the player
+                if (binding.player.isPrimeControllerFullyVisible()) {
+                    binding.player.hideController()
+                    return
+                }
                 if (commonPlayerViewModel.isFullscreen.value == true) unsetFullscreen()
                 else {
                     binding.playerMotionLayout.setTransitionDuration(250)
@@ -1962,6 +1968,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
     }
 
     fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        // PrimeTube: never answer remote keys while the player is minimized
+        // to the mini bar - the keys belong to the visible screen then
+        if (commonPlayerViewModel.isMiniPlayerVisible.value == true) return false
         return _binding?.player?.onKeyUp(keyCode, event) ?: false
     }
 

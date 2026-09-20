@@ -1,8 +1,10 @@
 package com.github.libretube.ui.views
 
 import android.annotation.SuppressLint
+import android.app.UiModeManager
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -23,6 +25,8 @@ import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewGroup
+import android.view.ViewParent
 import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -135,6 +139,10 @@ class CustomExoPlayerView(
     private val runnableHandler = Handler(Looper.getMainLooper())
     private var isPlayerLocked: Boolean = false
 
+    // PrimeTube: true while a remote/D-pad focus move happened inside the
+    // controller - used to keep the auto-hide countdown alive on TVs
+    private var isTvDevice = checkIsTvDevice()
+
     private var resizeModePref: Int
         set(value) {
             PreferenceHelper.putInt(
@@ -211,6 +219,55 @@ class CustomExoPlayerView(
         if (show) showController() else hideController()
     }
 
+    /** PrimeTube: public read access for the fragments. */
+    fun isPrimeControllerFullyVisible(): Boolean = isControllerFullyVisible
+
+    /**
+     * PrimeTube: TV remote support - show the controls and move the focus
+     * onto the play/pause button so the whole control bar can be navigated
+     * with the D-pad of a TV remote.
+     */
+    private fun showTvControls() {
+        showController()
+        if (isTvDevice) focusControllerForTv()
+    }
+
+    /**
+     * PrimeTube: make every clickable control focusable and put the focus on
+     * the play/pause button - remote D-pad navigation starts from there.
+     */
+    private fun focusControllerForTv() {
+        val queue = ArrayDeque<View>()
+        queue.add(binding.root)
+        while (queue.isNotEmpty()) {
+            val view = queue.removeFirst()
+            if (view.isClickable && !view.isFocusable) view.isFocusable = true
+            (view as? ViewGroup)?.let { group ->
+                for (i in 0 until group.childCount) queue.add(group.getChildAt(i))
+            }
+        }
+        binding.playPauseBTN.requestFocus()
+    }
+
+    /** PrimeTube: whether the view lives inside the player control bar. */
+    private fun isViewInsideController(view: View): Boolean {
+        var parent: ViewParent? = view.parent
+        while (parent != null) {
+            if (parent === binding.root) return true
+            parent = parent.parent
+        }
+        return false
+    }
+
+    /** PrimeTube: Android TV / set-top box detection. */
+    private fun checkIsTvDevice(): Boolean {
+        val uiMode = context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        if (uiMode?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION) return true
+        return runCatching {
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        }.getOrDefault(false)
+    }
+
     private var playerViewModel: PlayerViewModel? = null
     private var commonPlayerViewModel: CommonPlayerViewModel? = null
     private var viewLifecycleOwner: LifecycleOwner? = null
@@ -254,6 +311,21 @@ class CustomExoPlayerView(
         )
 
         audioHelper = AudioHelper(context)
+
+        // PrimeTube: on TVs the 2 s auto-hide must not fight remote focus
+        // navigation - restart the countdown whenever the focus moves between
+        // the player controls
+        if (isTvDevice) {
+            viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
+                if (newFocus != null && isViewInsideController(newFocus) &&
+                    isControllerFullyVisible
+                ) {
+                    cancelHideControllerTask()
+                    enqueueHideControllerTask()
+                }
+            }
+        }
+
         fullscreenGestureAnimationController = FullscreenGestureAnimationController(
             playerView = this,
             videoFrameView = backgroundBinding.exoContentFrame,
@@ -1945,6 +2017,22 @@ class CustomExoPlayerView(
                 player?.togglePlayPauseState()
             }
 
+            // PrimeTube: TV remote - OK opens the control bar and puts the
+            // focus on play/pause; when the bar is already open it toggles
+            // playback like on the YouTube TV app
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                if (isControllerFullyVisible) {
+                    player?.togglePlayPauseState()
+                } else {
+                    showTvControls()
+                }
+            }
+
+            // PrimeTube: TV remote - any up/down movement reveals the bar
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (!isControllerFullyVisible) showTvControls() else return false
+            }
+
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                 forward()
             }
@@ -1953,11 +2041,15 @@ class CustomExoPlayerView(
                 rewind()
             }
 
-            KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_NAVIGATE_NEXT -> {
+            // PrimeTube: full media key support on TVs and keyboards
+            KeyEvent.KEYCODE_MEDIA_PLAY -> player?.play()
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> player?.pause()
+
+            KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_NAVIGATE_NEXT, KeyEvent.KEYCODE_MEDIA_NEXT -> {
                 PlayingQueue.getNext()?.let { (player as? MediaController)?.navigateVideo(it) }
             }
 
-            KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_NAVIGATE_PREVIOUS -> {
+            KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_NAVIGATE_PREVIOUS, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
                 PlayingQueue.getPrev()?.let { (player as? MediaController)?.navigateVideo(it) }
             }
 

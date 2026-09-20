@@ -1,21 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PrimeTube: premium translucent circular background with ripple and a
-     TV focus ring for the play/pause button -->
+<!-- PrimeTube: borderless player button background with a clear focus ring
+     so TV remotes can navigate the control bar visually -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="#55FFFFFF">
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
     <item>
         <selector>
             <item android:state_focused="true">
                 <shape android:shape="oval">
-                    <solid android:color="#4D000000" />
+                    <solid android:color="#33000000" />
                     <stroke
                         android:width="2dp"
                         android:color="#E6FFFFFF" />
                 </shape>
             </item>
-            <item>
+            <item android:state_pressed="true">
                 <shape android:shape="oval">
                     <solid android:color="#4D000000" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="oval">
+                    <solid android:color="#00000000" />
                 </shape>
             </item>
         </selector>

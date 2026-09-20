@@ -81,7 +81,8 @@
         <item name="android:layout_height">42dp</item>
         <item name="android:layout_width">42dp</item>
         <item name="android:layout_gravity">center</item>
-        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <!-- PrimeTube: focus ring so TV remotes can navigate the bar -->
+        <item name="android:background">@drawable/prime_player_btn_borderless</item>
 
     </style>
 
@@ -89,6 +90,8 @@
         <item name="android:layout_width">42dp</item>
         <item name="android:layout_height">42dp</item>
         <item name="android:backgroundTint">@android:color/white</item>
+        <!-- PrimeTube: focus ring so TV remotes can navigate the bar -->
+        <item name="android:background">@drawable/prime_player_btn_borderless</item>
         <item name="android:layout_marginStart">10dp</item>
         <item name="android:layout_marginEnd">10dp</item>
     </style>
@@ -99,7 +102,8 @@
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_gravity">center</item>
-        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <!-- PrimeTube: focus ring so TV remotes can navigate the bar -->
+        <item name="android:background">@drawable/prime_player_btn_borderless</item>
         <item name="android:textColor">@android:color/white</item>
 
     </style>
