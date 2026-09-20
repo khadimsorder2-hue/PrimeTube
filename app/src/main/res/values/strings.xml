@@ -744,4 +744,6 @@
     <string name="prime_ai_done">Bangla subtitles ready</string>
     <string name="prime_ai_failed">AI subtitle translation failed - check your Gemini API key and model</string>
     <string name="prime_ai_no_subtitles">This video has no subtitles to translate</string>
+    <string name="prime_keypad_empty">--</string>
+    <string name="prime_keypad_delete">Delete last digit</string>
 </resources>

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PrimeTube: premium TV-style channel number keypad.
+     Big display on top, 3x4 key grid below (1-9, backspace, 0, GO).
+     Every key is focusable so the D-pad works on Android TV. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/prime_keypad_bg"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <!-- PrimeTube: the typed channel number, right aligned like a real TV -->
+    <TextView
+        android:id="@+id/keypadDisplay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="end|center_vertical"
+        android:minHeight="64dp"
+        android:paddingHorizontal="10dp"
+        android:shadowColor="#B3000000"
+        android:shadowRadius="6"
+        android:text="@string/prime_keypad_empty"
+        android:textColor="@android:color/white"
+        android:textSize="44sp"
+        android:textStyle="bold"
+        tools:text="123" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal"
+        android:weightSum="3">
+
+        <TextView
+            android:id="@+id/keypad1"
+            style="@style/PrimeNumberKey"
+            android:text="1" />
+
+        <TextView
+            android:id="@+id/keypad2"
+            style="@style/PrimeNumberKey"
+            android:text="2" />
+
+        <TextView
+            android:id="@+id/keypad3"
+            style="@style/PrimeNumberKey"
+            android:text="3" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="3">
+
+        <TextView
+            android:id="@+id/keypad4"
+            style="@style/PrimeNumberKey"
+            android:text="4" />
+
+        <TextView
+            android:id="@+id/keypad5"
+            style="@style/PrimeNumberKey"
+            android:text="5" />
+
+        <TextView
+            android:id="@+id/keypad6"
+            style="@style/PrimeNumberKey"
+            android:text="6" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="3">
+
+        <TextView
+            android:id="@+id/keypad7"
+            style="@style/PrimeNumberKey"
+            android:text="7" />
+
+        <TextView
+            android:id="@+id/keypad8"
+            style="@style/PrimeNumberKey"
+            android:text="8" />
+
+        <TextView
+            android:id="@+id/keypad9"
+            style="@style/PrimeNumberKey"
+            android:text="9" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="3">
+
+        <ImageView
+            android:id="@+id/keypadBackspace"
+            style="@style/PrimeNumberKey"
+            android:contentDescription="@string/prime_keypad_delete"
+            android:padding="15dp"
+            android:src="@drawable/ic_backspace_prime" />
+
+        <TextView
+            android:id="@+id/keypad0"
+            style="@style/PrimeNumberKey"
+            android:text="0" />
+
+        <TextView
+            android:id="@+id/keypadGo"
+            style="@style/PrimeNumberKey"
+            android:background="@drawable/prime_live_number_bg"
+            android:gravity="center"
+            android:text="@string/prime_go"
+            android:textSize="16sp" />
+    </LinearLayout>
+</LinearLayout>

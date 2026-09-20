@@ -1,11 +1,14 @@
 package com.github.libretube.ui.activities
 
+import android.app.Dialog
 import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.Network
@@ -18,8 +21,10 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.TextureView
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -87,6 +92,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     /** PrimeTube: set once a channel really started, so onResume can restart it. */
     private var everStarted = false
+
+    /** PrimeTube: the open channel-number keypad, dismissed with the activity. */
+    private var numberKeypadDialog: Dialog? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var queueAdapter: LiveTVAdapter? = null
@@ -456,36 +464,85 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         handler.postDelayed(sleepTickRunnable, 1000)
     }
 
-    // ---------- channel number jump (TV-style 123) ----------
+    // ---------- channel number jump (premium TV-style keypad) ----------
 
     private fun showNumberJumpDialog() {
         if (channels.isEmpty()) return
-        val pad = (20 * resources.displayMetrics.density).toInt()
-        val input = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
-            hint = "1 - ${channels.size}"
-            setSingleLine(true)
-            typeface = Typeface.DEFAULT_BOLD
+        val view = layoutInflater.inflate(R.layout.dialog_number_keypad, null)
+        val display = view.findViewById<TextView>(R.id.keypadDisplay)
+        val maxNumber = channels.size
+        val digits = StringBuilder()
+
+        fun updateDisplay() {
+            display.text = if (digits.isEmpty()) {
+                getString(R.string.prime_keypad_empty)
+            } else {
+                digits.toString()
+            }
         }
-        val wrapper = FrameLayout(this)
-        wrapper.setPadding(pad, pad / 2, pad, 0)
-        wrapper.addView(input)
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.prime_channel_jump)
-            .setView(wrapper)
-            .setPositiveButton(R.string.prime_go) { _, _ ->
-                val number = input.text.toString().toIntOrNull()
-                when {
-                    number == null -> Unit
-                    number in 1..channels.size -> {
-                        binding.liveQueueRoot.isGone = true
-                        playChannel(number - 1)
-                    }
-                    else -> toast(R.string.prime_channel_invalid)
+
+        fun go() {
+            val number = digits.toString().toIntOrNull()
+            when {
+                number == null -> Unit
+                number in 1..maxNumber -> {
+                    numberKeypadDialog?.dismiss()
+                    numberKeypadDialog = null
+                    binding.liveQueueRoot.isGone = true
+                    playChannel(number - 1)
+                }
+                else -> toast(R.string.prime_channel_invalid)
+            }
+        }
+
+        /** PrimeTube: jump as soon as no longer number can start with these digits. */
+        fun maybeAutoGo() {
+            val number = digits.toString().toIntOrNull() ?: return
+            if (number in 1..maxNumber && number * 10 > maxNumber) go()
+        }
+
+        fun bindDigit(id: Int, digit: Int) {
+            view.findViewById<View>(id).setOnClickListener {
+                if (digits.length < 4) {
+                    digits.append(digit)
+                    updateDisplay()
+                    maybeAutoGo()
                 }
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        }
+
+        bindDigit(R.id.keypad1, 1)
+        bindDigit(R.id.keypad2, 2)
+        bindDigit(R.id.keypad3, 3)
+        bindDigit(R.id.keypad4, 4)
+        bindDigit(R.id.keypad5, 5)
+        bindDigit(R.id.keypad6, 6)
+        bindDigit(R.id.keypad7, 7)
+        bindDigit(R.id.keypad8, 8)
+        bindDigit(R.id.keypad9, 9)
+        bindDigit(R.id.keypad0, 0)
+
+        view.findViewById<View>(R.id.keypadBackspace).setOnClickListener {
+            if (digits.isNotEmpty()) digits.deleteCharAt(digits.length - 1)
+            updateDisplay()
+        }
+        view.findViewById<View>(R.id.keypadGo).setOnClickListener { go() }
+
+        // PrimeTube: borderless floating keypad - no dialog chrome, just the
+        // premium dark card. TV: D-pad focus starts on the middle key (5).
+        val dialog = Dialog(this)
+        dialog.setContentView(view)
+        dialog.setCanceledOnTouchOutside(true)
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.72f).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        numberKeypadDialog = dialog
+        dialog.show()
+        view.findViewById<View>(R.id.keypad5)?.requestFocus()
     }
 
     // ---------- auto reconnect: internet back = stream back ----------
@@ -801,6 +858,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        numberKeypadDialog?.dismiss()
+        numberKeypadDialog = null
         handler.removeCallbacksAndMessages(null)
         unregisterNetworkWatcher()
         player?.release()

@@ -104,6 +104,21 @@
 
     </style>
 
+    <!-- PrimeTube: one key of the premium channel number keypad -->
+    <style name="PrimeNumberKey">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_height">54dp</item>
+        <item name="android:layout_margin">5dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/prime_number_key_bg</item>
+        <item name="android:focusable">true</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
     <style name="WatchProgress">
 
         <item name="android:layout_width">0dp</item>
