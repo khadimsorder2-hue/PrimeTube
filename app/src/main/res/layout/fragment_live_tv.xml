@@ -1,67 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PrimeTube: Live TV tab - IPTV playlist channels in a numbered 3-per-row grid -->
-<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- PrimeTube: Live TV tab - IPTV playlist channels in a numbered 3-per-row grid,
+     with a premium header (title + playlist source manager) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/liveSwipe"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:colorBackground">
+    android:background="?android:colorBackground"
+    android:orientation="vertical">
 
-    <FrameLayout
+    <!-- PrimeTube: header with title + source (playlist) manager button -->
+    <LinearLayout
+        android:id="@+id/liveHeader"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="6dp">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/liveRecView"
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@string/prime_live_tv"
+            android:src="@drawable/ic_nav_live"
+            app:tint="@color/red_md_theme_light_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/prime_live_tv"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/liveSourcesBtn"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/prime_sources_title"
+            android:src="@drawable/ic_playlist_add"
+            app:tint="?android:attr/textColorPrimary" />
+    </LinearLayout>
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/liveSwipe"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingHorizontal="8dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="16dp"
-            android:visibility="gone"
-            tools:visibility="visible" />
+            android:layout_height="match_parent">
 
-        <ProgressBar
-            android:id="@+id/liveProgress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:indeterminate="true" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/liveRecView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingHorizontal="8dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="16dp"
+                android:visibility="gone"
+                tools:visibility="visible" />
 
-        <LinearLayout
-            android:id="@+id/liveError"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <ImageView
-                android:layout_width="80dp"
-                android:layout_height="80dp"
-                android:alpha="0.5"
-                android:contentDescription="@string/prime_live_tv"
-                android:src="@drawable/ic_nav_live" />
-
-            <TextView
-                android:id="@+id/liveErrorText"
+            <ProgressBar
+                android:id="@+id/liveProgress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_gravity="center"
+                android:indeterminate="true" />
+
+            <LinearLayout
+                android:id="@+id/liveError"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
                 android:gravity="center"
-                android:paddingHorizontal="24dp"
-                android:text="@string/prime_live_tv_failed"
-                android:textColor="?android:attr/textColorSecondary"
-                android:textSize="14sp" />
+                android:orientation="vertical"
+                android:visibility="gone">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/liveRetry"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/retry" />
-        </LinearLayout>
-    </FrameLayout>
-</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+                <ImageView
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:alpha="0.5"
+                    android:contentDescription="@string/prime_live_tv"
+                    android:src="@drawable/ic_nav_live" />
+
+                <TextView
+                    android:id="@+id/liveErrorText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="24dp"
+                    android:text="@string/prime_live_tv_failed"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/liveRetry"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/retry" />
+            </LinearLayout>
+        </FrameLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</LinearLayout>

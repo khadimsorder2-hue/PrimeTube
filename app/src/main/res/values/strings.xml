@@ -682,4 +682,28 @@
     <string name="prime_login_err_blocked">This instance is blocked by YouTube. Try another instance: Settings → Instance.</string>
     <string name="prime_login_err_credentials">Wrong username or password - or no account with this name on the selected instance. Tap Help for instructions.</string>
     <string name="prime_login_err_network">Can\'t reach the instance. Check your internet, or choose another instance in Settings → Instance.</string>
+
+    <!-- PrimeTube Live TV playlist sources -->
+    <string name="prime_close">Close</string>
+    <string name="prime_add">Add</string>
+    <string name="prime_sources_title">Live TV sources</string>
+    <string name="prime_add_source">Add new source</string>
+    <string name="prime_source_type">Source type</string>
+    <string name="prime_src_m3u">M3U link</string>
+    <string name="prime_src_m3u8">M3U8 link</string>
+    <string name="prime_src_json">JSON link</string>
+    <string name="prime_src_file">Playlist file (from device)</string>
+    <string name="prime_src_m3u8_hint">https://example.com/playlist.m3u8</string>
+    <string name="prime_src_json_hint">https://example.com/channels.json</string>
+    <string name="prime_source_name">Name (optional)</string>
+    <string name="prime_source_name_hint">e.g. My IPTV</string>
+    <string name="prime_source_link">Link</string>
+    <string name="prime_source_file_label">Selected file</string>
+    <string name="prime_source_link_hint">https://example.com/playlist.m3u</string>
+    <string name="prime_browse">Browse</string>
+    <string name="prime_source_active">Active</string>
+    <string name="prime_source_added">Source added</string>
+    <string name="prime_source_deleted">Source deleted</string>
+    <string name="prime_source_invalid">Enter a valid name/link or pick a file</string>
+    <string name="prime_source_load_failed">Could not load this playlist source</string>
 </resources>

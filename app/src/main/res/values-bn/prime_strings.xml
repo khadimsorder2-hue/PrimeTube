@@ -35,4 +35,28 @@
     <string name="prime_chip_quality">কোয়ালিটি</string>
     <string name="prime_chip_channels">চ্যানেল</string>
     <string name="prime_search_hint">প্লেলিস্ট খুঁজুন…</string>
+
+    <!-- PrimeTube Live TV playlist sources -->
+    <string name="prime_close">বন্ধ করুন</string>
+    <string name="prime_add">যোগ করুন</string>
+    <string name="prime_sources_title">লাইভ টিভি সোর্স</string>
+    <string name="prime_add_source">নতুন সোর্স যোগ করুন</string>
+    <string name="prime_source_type">সোর্সের ধরন</string>
+    <string name="prime_src_m3u">M3U লিংক</string>
+    <string name="prime_src_m3u8">M3U8 লিংক</string>
+    <string name="prime_src_json">JSON লিংক</string>
+    <string name="prime_src_file">প্লেলিস্ট ফাইল (ডিভাইস থেকে)</string>
+    <string name="prime_src_m3u8_hint">https://example.com/playlist.m3u8</string>
+    <string name="prime_src_json_hint">https://example.com/channels.json</string>
+    <string name="prime_source_name">নাম (ঐচ্ছিক)</string>
+    <string name="prime_source_name_hint">যেমন: My IPTV</string>
+    <string name="prime_source_link">লিংক</string>
+    <string name="prime_source_file_label">নির্বাচিত ফাইল</string>
+    <string name="prime_source_link_hint">https://example.com/playlist.m3u</string>
+    <string name="prime_browse">ব্রাউজ</string>
+    <string name="prime_source_active">চালু</string>
+    <string name="prime_source_added">সোর্স যোগ হয়েছে</string>
+    <string name="prime_source_deleted">সোর্স মুছে ফেলা হয়েছে</string>
+    <string name="prime_source_invalid">সঠিক নাম/লিংক দিন বা ফাইল বাছুন</string>
+    <string name="prime_source_load_failed">এই প্লেলিস্ট সোর্স লোড করা যায়নি</string>
 </resources>
