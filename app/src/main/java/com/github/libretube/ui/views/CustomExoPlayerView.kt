@@ -18,6 +18,7 @@ import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.PixelCopy
+import android.view.View
 import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -645,9 +646,9 @@ class CustomExoPlayerView(
         )
         if (locked) {
             hideController()
-            toast(getString(R.string.prime_lock_on))
+            toast(context.getString(R.string.prime_lock_on))
         } else {
-            toast(getString(R.string.prime_lock_off))
+            toast(context.getString(R.string.prime_lock_off))
             if (isControllerFullyVisible) enqueueHideControllerTask()
         }
     }
@@ -696,7 +697,7 @@ class CustomExoPlayerView(
                 abPointA = p.currentPosition
                 abPointB = -1L
                 binding.abToggle.alpha = 0.55f
-                toast(getString(R.string.prime_ab_a_set, DateUtils.formatElapsedTime(abPointA / 1000)))
+                toast(context.getString(R.string.prime_ab_a_set, DateUtils.formatElapsedTime(abPointA / 1000)))
             }
 
             abPointB < 0 -> {
@@ -707,7 +708,7 @@ class CustomExoPlayerView(
                     abPointB = end
                     binding.abToggle.alpha = 1f
                     toast(
-                        getString(
+                        context.getString(
                             R.string.prime_ab_loop_on,
                             DateUtils.formatElapsedTime(abPointA / 1000),
                             DateUtils.formatElapsedTime(abPointB / 1000)
@@ -780,7 +781,7 @@ class CustomExoPlayerView(
             val name = runCatching { saveBitmapToGallery(bitmap) }.getOrNull()
             Handler(Looper.getMainLooper()).post {
                 if (name != null) {
-                    toast(getString(R.string.prime_screenshot_saved, name))
+                    toast(context.getString(R.string.prime_screenshot_saved, name))
                 } else {
                     toast(R.string.prime_screenshot_failed)
                 }
@@ -803,7 +804,7 @@ class CustomExoPlayerView(
             resolver.openOutputStream(uri)?.use { output ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)
             } ?: throw IOException("output stream failed")
-            return getString(R.string.prime_screenshot_folder)
+            return context.getString(R.string.prime_screenshot_folder)
         } else {
             val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "PrimeTube")
             if (!dir.exists() && !dir.mkdirs()) throw IOException("mkdirs failed")
