@@ -48,6 +48,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -83,6 +84,15 @@ open class OnlinePlayerService : AbstractPlayerService() {
      */
     private var fetchVideoInfoJob: Job? = null
 
+    /**
+     * PrimeTube: "source error" recovery - stream URLs (proxied googlevideo links)
+     * die frequently. Instead of falling into STATE_IDLE (which destroys the whole
+     * service and kills playback), re-fetch fresh streams and resume at the last
+     * position - twice, with a short backoff.
+     */
+    private var sourceErrorRetries = 0
+    private var sourceErrorRecovery = false
+
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
@@ -91,11 +101,16 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 }
 
                 Player.STATE_IDLE -> {
-                    onDestroy()
+                    // PrimeTube: an in-flight source-error recovery passes through
+                    // IDLE on purpose - only a real stop tears the service down
+                    if (!sourceErrorRecovery) onDestroy()
                 }
 
                 Player.STATE_BUFFERING -> {}
                 Player.STATE_READY -> {
+                    sourceErrorRetries = 0
+                    sourceErrorRecovery = false
+                    isPrimeRecovering = false
                     // save video to watch history when the video starts playing or is being resumed
                     // waiting for the player to be ready since the video can't be claimed to be watched
                     // while it did not yet start actually, but did buffer only so far
@@ -110,6 +125,33 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     }
                 }
             }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // PrimeTube: auto-recover from "source error" - expired stream URLs are
+            // the usual culprit. Re-fetch the streams and resume where it stopped.
+            if (sourceErrorRetries < SOURCE_ERROR_MAX_RETRIES && ::videoId.isInitialized) {
+                sourceErrorRetries++
+                sourceErrorRecovery = true
+                isPrimeRecovering = true
+                val resumePosition = exoPlayer?.currentPosition?.takeIf { it > 0 } ?: 0L
+                toastFromMainThread(getString(R.string.prime_source_retry))
+                scope.launch {
+                    delay(600L * sourceErrorRetries)
+                    if (sourceErrorRecovery) {
+                        isTransitioning = true
+                        startTimestampSeconds = (resumePosition / 1000L).takeIf { it > 0 }
+                        startPlayback()
+                        // PrimeTube: a recovered stream always continues playing
+                        exoPlayer?.play()
+                    }
+                }
+                return
+            }
+            sourceErrorRecovery = false
+            isPrimeRecovering = false
+            // show a toast on errors
+            toastFromMainThread(error.localizedMessage.orEmpty())
         }
     }
 
@@ -140,6 +182,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
         val timestampMs = startTimestampSeconds?.times(1000) ?: 0L
         startTimestampSeconds = null
+        // PrimeTube: a recovered session must re-arm - the next source error
+        // needs its full retry budget back
+        sourceErrorRecovery = false
 
         // stop any previous task for loading video info
         fetchVideoInfoJob?.cancelAndJoin()
@@ -454,3 +499,6 @@ open class OnlinePlayerService : AbstractPlayerService() {
             .setMetadata(streams, videoId)
             .build()
 }
+
+/** PrimeTube: how many times a playback error triggers a full stream re-fetch. */
+private const val SOURCE_ERROR_MAX_RETRIES = 2

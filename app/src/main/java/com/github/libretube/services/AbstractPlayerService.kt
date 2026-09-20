@@ -100,6 +100,13 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
      */
     protected var shouldHandleAutoplay = true
 
+    /**
+     * PrimeTube: set by OnlinePlayerService while an automatic source-error
+     * recovery is in flight - the raw "Source error" toast stays hidden then.
+     */
+    @Volatile
+    protected var isPrimeRecovering = false
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             super.onIsPlayingChanged(isPlaying)
@@ -113,8 +120,10 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // show a toast on errors
-            toastFromMainThread(error.localizedMessage.orEmpty())
+            // show a toast on errors - unless an automatic recovery is active
+            if (!isPrimeRecovering) {
+                toastFromMainThread(error.localizedMessage.orEmpty())
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {

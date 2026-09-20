@@ -21,6 +21,7 @@ import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.db.obj.SavedDownload
 import com.github.libretube.helpers.PreferenceHelper
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,7 +70,9 @@ class StorageDownloadService : android.app.Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val videoId = intent?.getStringExtra(EXTRA_VIDEO_ID) ?: return START_NOT_STICKY
+        val audioOnly = intent.getBooleanExtra(EXTRA_AUDIO_ONLY, false)
 
+        QUEUE.add(Task(videoId, audioOnly))
         if (worker?.isActive != true) {
             worker = scope.launch { processQueue() }
         }
@@ -84,18 +87,18 @@ class StorageDownloadService : android.app.Service() {
     private suspend fun processQueue() {
         workerMutex.withLock {
             while (true) {
-                val videoId = QUEUE.poll() ?: break
-                runCatching { saveVideo(videoId) }
+                val task = QUEUE.poll() ?: break
+                runCatching { saveVideo(task.videoId, task.audioOnly) }
                     .onFailure {
                         it.printStackTrace()
-                        notifyFinished(videoId, false, it.message ?: "error")
+                        notifyFinished(task.videoId, false, it.message ?: "error")
                     }
             }
             stopSelf()
         }
     }
 
-    private suspend fun saveVideo(videoId: String) {
+    private suspend fun saveVideo(videoId: String, audioOnly: Boolean = false) {
         // promote to foreground immediately (5s rule for startForegroundService)
         startForegroundCompat(
             videoId.notificationId(),
@@ -110,22 +113,44 @@ class StorageDownloadService : android.app.Service() {
             return
         }
 
-        // best combined (video+audio) stream, like YouTube's 360p/720p MP4
-        val stream = streams.videoStreams
-            .filter { it.videoOnly != true && !it.url.isNullOrEmpty() }
-            .maxByOrNull {
-                it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0
+        // PrimeTube: audio requests save the best audio stream (m4a/opus),
+        // video requests the best combined (video+audio) stream as MP4
+        val (stream, isAudio) = if (audioOnly) {
+            val audio = streams.audioStreams
+                .filter { !it.url.isNullOrEmpty() }
+                .maxByOrNull {
+                    (it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0)
+                }
+            if (audio == null) {
+                notifyFinished(videoId, false, getString(R.string.no_audio))
+                return
             }
-
-        if (stream == null) {
-            notifyFinished(videoId, false, getString(R.string.no_muxed_stream))
-            return
+            Pair(audio, true)
+        } else {
+            val muxed = streams.videoStreams
+                .filter { it.videoOnly != true && !it.url.isNullOrEmpty() }
+                .maxByOrNull {
+                    it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0
+                }
+            if (muxed == null) {
+                notifyFinished(videoId, false, getString(R.string.no_muxed_stream))
+                return
+            }
+            Pair(muxed, false)
         }
 
         val rawName = streams.title.ifBlank { videoId }
-        val fileName = sanitizeFileName("$rawName.mp4")
+        val mimeType = stream.mimeType.orEmpty().ifBlank { if (isAudio) "audio/mp4" else "video/mp4" }
+        val extension = when {
+            isAudio && mimeType.contains("webm") || isAudio && mimeType.contains("opus") -> "opus"
+            isAudio && mimeType.contains("mpeg") -> "mp3"
+            isAudio -> "m4a"
+            mimeType.contains("webm") -> "webm"
+            else -> "mp4"
+        }
+        val fileName = sanitizeFileName("$rawName.$extension")
 
-        val (savedUri, sizeBytes) = writeStream(stream.url!!, fileName) { written, total ->
+        val (savedUri, sizeBytes) = writeStream(stream.url!!, fileName, mimeType) { written, total ->
             updateProgress(videoId, written, total)
         }
 
@@ -147,15 +172,23 @@ class StorageDownloadService : android.app.Service() {
 
     /**
      * Write the downloaded bytes into the configured SAF folder, or into
-     * Movies/PrimeTube via MediaStore when no folder was chosen (Android 10+).
+     * Downloads/PrimeTube in the shared storage when no folder was chosen
+     * (MediaStore on Android 10+, legacy public dir below).
      */
-    private fun writeStream(url: String, fileName: String, onProgress: (Long, Long) -> Unit): Pair<Uri, Long> {
+    private fun writeStream(
+        url: String,
+        fileName: String,
+        mimeType: String,
+        onProgress: (Long, Long) -> Unit
+    ): Pair<Uri, Long> {
         val folderPref = PreferenceHelper.getString(PreferenceKeys.MP4_DOWNLOAD_FOLDER, "")
 
         val targetUri = if (folderPref.isNotBlank()) {
-            createSafFile(folderPref.toUri(), fileName)
+            createSafFile(folderPref.toUri(), fileName, mimeType)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            createMediaStoreFile(fileName, mimeType)
         } else {
-            createMediaStoreFile(fileName)
+            createLegacyPublicFile(fileName)
         }
 
         val request = okhttp3.Request.Builder().url(url).build()
@@ -190,41 +223,83 @@ class StorageDownloadService : android.app.Service() {
                 }
             } ?: run { cleanup(targetUri); error("cannot open output stream") }
 
+            finalizeFile(targetUri)
             return Pair(targetUri, written)
         }
     }
 
-    private fun createSafFile(treeUri: Uri, fileName: String): Uri {
+    /** PrimeTube: publish pending MediaStore files + index legacy files. */
+    private fun finalizeFile(uri: Uri) {
+        runCatching {
+            if (uri.toString().startsWith("content://media/") &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            ) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                contentResolver.update(uri, values, null, null)
+            } else if (uri.scheme == "file") {
+                android.media.MediaScannerConnection.scanFile(
+                    this,
+                    arrayOf(uri.path!!),
+                    null,
+                    null
+                )
+            }
+        }
+    }
+
+    private fun createSafFile(treeUri: Uri, fileName: String, mimeType: String): Uri {
         return try {
             val docId = DocumentsContract.getTreeDocumentId(treeUri)
             val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
-            DocumentsContract.createDocument(contentResolver, dirUri, "video/mp4", fileName)
+            DocumentsContract.createDocument(contentResolver, dirUri, mimeType, fileName)
                 ?: error("cannot create document")
         } catch (e: Exception) {
             error("cannot create file in the chosen folder: ${e.message}")
         }
     }
 
-    private fun createMediaStoreFile(fileName: String): Uri {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            error(getString(R.string.no_download_folder))
-        }
+    /**
+     * PrimeTube: default target - Downloads/PrimeTube, the folder every file
+     * manager and the gallery show. MediaStore needs NO storage permission on
+     * Android 10+ for this.
+     */
+    private fun createMediaStoreFile(fileName: String, mimeType: String): Uri {
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/PrimeTube")
-            put(MediaStore.Video.Media.IS_PENDING, 1)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/PrimeTube")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        return contentResolver.insert(collection, values) ?: error("cannot create media file")
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        return contentResolver.insert(collection, values)
+            ?: error("cannot create media file")
+    }
+
+    /**
+     * PrimeTube: Android 8/9 legacy path - the permission is requested when
+     * the download is triggered; the file lands in Downloads/PrimeTube too.
+     */
+    private fun createLegacyPublicFile(fileName: String): Uri {
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "PrimeTube"
+        )
+        if (!dir.exists() && !dir.mkdirs()) error("cannot create Downloads/PrimeTube")
+        val file = File(dir, fileName)
+        file.createNewFile()
+        return Uri.fromFile(file)
     }
 
     private fun cleanup(uri: Uri) {
         runCatching {
             if (uri.toString().startsWith("content://media/")) {
                 contentResolver.delete(uri, null, null)
-            } else {
+            } else if (uri.scheme == "content") {
                 DocumentsContract.deleteDocument(contentResolver, uri)
+            } else {
+                File(uri.path!!).delete()
             }
         }
     }
@@ -304,16 +379,21 @@ class StorageDownloadService : android.app.Service() {
 
     companion object {
         private const val EXTRA_VIDEO_ID = "video_id"
+        private const val EXTRA_AUDIO_ONLY = "audio_only"
         private const val FILE_NAME_MAX_LENGTH = 100
-        private val QUEUE = ConcurrentLinkedQueue<String>()
+        private val QUEUE = ConcurrentLinkedQueue<Task>()
+
+        private data class Task(val videoId: String, val audioOnly: Boolean)
 
         /**
-         * Enqueue a video to be saved as MP4 file to the user's storage.
+         * Enqueue a video (or audio) to be saved as a normal media file into
+         * the phone storage - Downloads/PrimeTube by default, or the SAF
+         * folder the user picked in Settings.
          */
-        fun enqueue(context: Context, videoId: String) {
-            QUEUE.add(videoId)
+        fun enqueue(context: Context, videoId: String, audioOnly: Boolean = false) {
             val intent = Intent(context, StorageDownloadService::class.java)
                 .putExtra(EXTRA_VIDEO_ID, videoId)
+                .putExtra(EXTRA_AUDIO_ONLY, audioOnly)
             context.startForegroundService(intent)
         }
     }

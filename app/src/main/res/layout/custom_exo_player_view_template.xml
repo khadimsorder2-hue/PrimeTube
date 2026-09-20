@@ -31,12 +31,21 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"/>
 
+        <!-- PrimeTube: premium buffering - red sweep on a dark glass chip -->
         <com.google.android.material.loadingindicator.LoadingIndicator
             android:id="@id/exo_buffering"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:indeterminate="true"
-            android:layout_gravity="center"/>
+            android:layout_gravity="center"
+            android:background="@drawable/prime_buffering_chip_bg"
+            android:elevation="8dp"
+            android:padding="16dp"
+            android:scaleX="0.9"
+            android:scaleY="0.9"
+            app:indicatorColor="#FF0033"
+            app:indicatorLineWidth="4dp"
+            app:indicatorSize="44dp" />
 
         <TextView android:id="@id/exo_error_message"
             android:layout_width="wrap_content"
@@ -159,5 +168,44 @@
             tools:visibility="visible" />
 
     </com.google.android.material.card.MaterialCardView>
+
+    <!-- PrimeTube: clean PiP controls - only a slim auto-hiding progress
+         slider, no buttons at all -->
+    <LinearLayout
+        android:id="@+id/primePipProgressRoot"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:alpha="0.92"
+        android:background="@drawable/prime_pip_progress_bg"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:visibility="gone">
+
+        <SeekBar
+            android:id="@+id/primePipSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:maxHeight="3dp"
+            android:progressTint="#FF0033"
+            android:progressBackgroundTint="#59FFFFFF"
+            android:splitTrack="false"
+            android:thumbOffset="2dp"
+            android:thumbTint="#FF0033" />
+
+        <TextView
+            android:id="@+id/primePipTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:shadowColor="#B3000000"
+            android:shadowRadius="4"
+            android:textColor="#D9FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
 </merge>

@@ -625,6 +625,11 @@
     <string name="prime_live_retry_next">Channel is not responding — switching to the next one</string>
     <string name="prime_live_recovering">Weak stream — recovering…</string>
 
+    <!-- PrimeTube: source error recovery + storage downloads -->
+    <string name="prime_source_retry">Stream error — reloading with fresh sources…</string>
+    <string name="prime_storage_denied">Storage permission denied</string>
+    <string name="prime_saving_to_storage">Saving to Downloads/PrimeTube…</string>
+
     <!-- PrimeTube in-app updater -->
     <string name="prime_update">Update</string>
     <string name="prime_update_checking">Checking for updates…</string>

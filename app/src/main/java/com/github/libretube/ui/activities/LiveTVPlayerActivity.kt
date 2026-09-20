@@ -214,6 +214,26 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     // PrimeTube: stamp the start so the watchdog can act when
                     // the buffer never recovers on its own
                     if (bufferingSince <= 0) bufferingSince = System.currentTimeMillis()
+                    // PrimeTube: premium buffering indicator with a soft fade
+                    _binding?.liveBuffering?.let { chip ->
+                        chip.animate().cancel()
+                        chip.isVisible = true
+                        chip.animate().alpha(1f).setDuration(220).start()
+                    }
+                }
+
+                else -> {
+                    // hide the buffering chip again
+                    _binding?.liveBuffering?.let { chip ->
+                        chip.animate().cancel()
+                        chip.animate()
+                            .alpha(0f)
+                            .setDuration(180)
+                            .withEndAction {
+                                chip.visibility = View.INVISIBLE
+                            }
+                            .start()
+                    }
                 }
             }
         }

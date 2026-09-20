@@ -1,6 +1,11 @@
 package com.github.libretube.ui.sheets
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
 import androidx.navigation.fragment.NavHostFragment
@@ -14,7 +19,9 @@ import com.github.libretube.db.obj.WatchPosition
 import com.github.libretube.enums.ShareObjectType
 import com.github.libretube.extensions.parcelable
 import com.github.libretube.extensions.toID
+import com.github.libretube.extensions.toastFromMainThread
 import com.github.libretube.helpers.DownloadHelper
+import com.github.libretube.services.StorageDownloadService
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PreferenceHelper
@@ -35,8 +42,40 @@ import kotlinx.coroutines.withContext
  *
  * Needs the [streamItem] to load the content from the right video.
  */
-class VideoOptionsBottomSheet : BaseBottomSheet() {
+class VideoOptionsBottomSheet : BaseBottomSheet(), DownloadHelper.PrimeStorageDownloadHost {
     private lateinit var streamItem: StreamItem
+
+    // ----- PrimeTube: "save to storage" download host (phone storage) -----
+    private var pendingStorageVideoId: String? = null
+    private val primeStoragePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val requestedVideoId = pendingStorageVideoId
+            pendingStorageVideoId = null
+            if (granted && requestedVideoId != null) {
+                StorageDownloadService.enqueue(requireContext(), requestedVideoId)
+            } else if (!granted) {
+                context?.let { toastFromMainThread(it.getString(R.string.prime_storage_denied)) }
+            }
+        }
+
+    /**
+     * PrimeTube: saves the media directly into the phone storage
+     * (Downloads/PrimeTube). Android 10+ needs no permission at all - on
+     * Android 8/9 the storage permission is requested on the download tap.
+     */
+    override fun requestPrimeStorageDownload(videoId: String) {
+        val hasPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            StorageDownloadService.enqueue(requireContext(), videoId)
+            return
+        }
+        pendingStorageVideoId = videoId
+        primeStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         streamItem = arguments?.parcelable(IntentData.streamItem)!!
@@ -80,7 +119,7 @@ class VideoOptionsBottomSheet : BaseBottomSheet() {
 
                 R.string.download -> {
                     DownloadHelper.startDownloadDialog(
-                        requireContext(),
+                        this,
                         parentFragmentManager,
                         videoId
                     )

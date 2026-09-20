@@ -20,6 +20,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- PrimeTube: in-app updater installs the downloaded release APK over the app -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- PrimeTube: "save to storage" downloads on Android 8/9 land in Downloads/PrimeTube;
+         Android 10+ uses MediaStore which needs no permission at all -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:name=".LibreTubeApp"
@@ -125,6 +130,7 @@
             android:name=".ui.activities.MainActivity"
             android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation|uiMode"
             android:exported="true"
+            android:supportsPictureInPicture="true"
             android:launchMode="singleTask"
             android:screenOrientation="locked"
             android:theme="@style/SplashScreenTheme"

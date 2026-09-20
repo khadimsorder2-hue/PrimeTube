@@ -30,6 +30,7 @@ import android.view.ViewParent
 import android.view.Window
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -314,6 +315,121 @@ class CustomExoPlayerView(
     // if null, use same quality as fullscreen
     private var noFullscreenResolution: Int? = null
 
+    /**
+     * PrimeTube: PiP slider wiring - a clean PiP window shows no buttons at
+     * all, just a slim auto-hiding progress slider that can also seek.
+     */
+    private var primePipMode = false
+    private var primePipSeekDragging = false
+
+    private val primePipHideRunnable = Runnable {
+        backgroundBinding.primePipProgressRoot.isGone = true
+    }
+
+    private val primePipTicker = object : Runnable {
+        override fun run() {
+            if (primePipMode) {
+                syncPrimePipProgress()
+                postDelayed(this, 500)
+            }
+        }
+    }
+
+    private fun setupPrimePipProgress() {
+        backgroundBinding.primePipSeek.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    val duration = player?.duration ?: 0L
+                    if (duration > 0) {
+                        backgroundBinding.primePipTime.text =
+                            primeMsToTime(value.toLong()) + " / " + primeMsToTime(duration)
+                    }
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                    primePipSeekDragging = true
+                    removeCallbacks(primePipHideRunnable)
+                }
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    primePipSeekDragging = false
+                    seekBar?.progress?.let { player?.seekTo(it.toLong()) }
+                    showPrimePipProgress()
+                }
+            }
+        )
+    }
+
+    /**
+     * PrimeTube: enables/disables the clean PiP overlay. Called by the player
+     * fragment whenever picture-in-picture mode changes.
+     */
+    fun setPrimePipMode(enabled: Boolean) {
+        if (primePipMode == enabled) return
+        primePipMode = enabled
+        if (enabled) {
+            showPrimePipProgress()
+            post(primePipTicker)
+        } else {
+            removeCallbacks(primePipTicker)
+            removeCallbacks(primePipHideRunnable)
+            primePipSeekDragging = false
+            backgroundBinding.primePipProgressRoot.isGone = true
+        }
+    }
+
+    private fun showPrimePipProgress() {
+        if (!primePipMode) return
+        syncPrimePipProgress()
+        backgroundBinding.primePipProgressRoot.isVisible = true
+        removeCallbacks(primePipHideRunnable)
+        postDelayed(primePipHideRunnable, PRIME_PIP_HIDE_DELAY_MS)
+    }
+
+    private fun togglePrimePipProgress() {
+        if (backgroundBinding.primePipProgressRoot.isVisible) {
+            backgroundBinding.primePipProgressRoot.isGone = true
+            removeCallbacks(primePipHideRunnable)
+        } else {
+            showPrimePipProgress()
+        }
+    }
+
+    private fun syncPrimePipProgress() {
+        val p = player ?: return
+        val duration = p.duration
+        val seek = backgroundBinding.primePipSeek
+        val time = backgroundBinding.primePipTime
+        val hasDuration = duration > 0
+        seek.isVisible = hasDuration
+        if (hasDuration) {
+            seek.max = duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            if (!primePipSeekDragging) {
+                seek.progress = p.currentPosition.coerceIn(0, duration)
+                    .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            }
+        }
+        time.text = if (hasDuration) {
+            primeMsToTime(p.currentPosition) + " / " + primeMsToTime(duration)
+        } else {
+            // live stream - no duration, no slider, just keep it clean
+            ""
+        }
+    }
+
+    private fun primeMsToTime(ms: Long): String {
+        val totalSeconds = (ms.coerceAtLeast(0L)) / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.US, "%d:%02d", minutes, seconds)
+        }
+    }
+
     init {
         brightnessHelper = BrightnessHelper(activity)
         playerGestureController = PlayerGestureController(activity, this)
@@ -330,6 +446,9 @@ class CustomExoPlayerView(
         )
 
         audioHelper = AudioHelper(context)
+
+        // PrimeTube: wire the clean PiP progress slider (auto-hides, can seek)
+        setupPrimePipProgress()
 
         // PrimeTube: on TVs the 2 s auto-hide must not fight remote focus
         // navigation - restart the countdown whenever the focus moves between
@@ -1867,6 +1986,11 @@ class CustomExoPlayerView(
     }
 
     override fun onSingleTap(areControlsLocked: Boolean) {
+        // PrimeTube: in PiP mode the tap only toggles the slim progress slider
+        if (primePipMode) {
+            togglePrimePipProgress()
+            return
+        }
         if (areControlsLocked) {
             // PrimeTube: locked - pulse the lock pill, never reveal the controls
             lockIndicator?.animate()
@@ -2171,6 +2295,9 @@ class CustomExoPlayerView(
 
         /** PrimeTube: handler token of the A-B repeat polling loop. */
         private const val AB_REPEAT_TOKEN = "primeAbRepeat"
+
+        /** PrimeTube: the PiP progress slider auto-hides after this long. */
+        private const val PRIME_PIP_HIDE_DELAY_MS = 2_500L
 
         private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.158f
 

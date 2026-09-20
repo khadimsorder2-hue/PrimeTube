@@ -407,6 +407,11 @@
     <!-- PrimeTube: Live TV recovery -->
     <string name="prime_live_recovering">স্ট্রিম দুর্বল — ঠিক করা হচ্ছে…</string>
 
+    <!-- PrimeTube: source error recovery + storage downloads -->
+    <string name="prime_source_retry">স্ট্রিম এরর — নতুন সোর্স দিয়ে আবার চালানো হচ্ছে…</string>
+    <string name="prime_storage_denied">স্টোরেজ পারমিশন দেওয়া হয়নি</string>
+    <string name="prime_saving_to_storage">Downloads/PrimeTube ফোল্ডারে সেভ হচ্ছে…</string>
+
     <!-- PrimeTube in-app updater -->
     <string name="prime_update">আপডেট</string>
     <string name="prime_update_checking">আপডেট আছে কিনা দেখা হচ্ছে…</string>

@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.os.bundleOf
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import com.github.libretube.R
 import com.github.libretube.api.PlaylistsHelper
@@ -32,6 +33,14 @@ import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.div
+
+/**
+ * PrimeTube: implemented by screens that can trigger a "save to storage"
+ * download. Hosts the WRITE_EXTERNAL_STORAGE runtime request on Android 8/9.
+ */
+interface PrimeStorageDownloadHost {
+    fun requestPrimeStorageDownload(videoId: String)
+}
 
 object DownloadHelper {
     const val VIDEO_DIR = "video"
@@ -77,13 +86,53 @@ object DownloadHelper {
      * - Internal: open the built-in download dialog (downloads are listed on the
      *   Downloads page in the bottom navigation)
      */
-    fun startDownloadDialog(context: Context, fragmentManager: FragmentManager, videoId: String) {
-        // PrimeTube: Seal is the default handoff target (matches the settings default)
+    fun startDownloadDialog(
+        fragment: Fragment,
+        fragmentManager: FragmentManager,
+        videoId: String
+    ) {
+        val context = fragment.requireContext()
+        // PrimeTube: storage is the DEFAULT handoff - the media lands directly
+        // in the phone storage (Downloads/PrimeTube) without an external app
         val provider = PreferenceHelper.getString(
             PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER,
             PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER
         )
 
+        when {
+            provider == PROVIDER_INTERNAL ->
+                showInAppDownloadDialog(fragmentManager, videoId)
+
+            provider == PROVIDER_STORAGE ->
+                (fragment as? PrimeStorageDownloadHost)?.requestPrimeStorageDownload(videoId)
+                    ?: StorageDownloadService.enqueue(context, videoId)
+
+            provider == PROVIDER_ASK ->
+                showDownloadChoiceDialog(
+                    context,
+                    "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
+                ) {
+                    showInAppDownloadDialog(fragmentManager, videoId)
+                }
+
+            else ->
+                // Seal or any custom downloader package
+                openInExternalDownloader(
+                    context,
+                    "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"
+                )
+        }
+    }
+
+    /**
+     * PrimeTube: compat overload for callers without a fragment (user asked
+     * for the storage flow through the "ask" dialog as well).
+     */
+    fun startDownloadDialog(context: Context, fragmentManager: FragmentManager, videoId: String) {
+        val provider = PreferenceHelper.getString(
+            PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER,
+            PreferenceKeys.DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER
+        )
         when {
             provider == PROVIDER_INTERNAL ->
                 showInAppDownloadDialog(fragmentManager, videoId)
@@ -100,7 +149,6 @@ object DownloadHelper {
                 }
 
             else ->
-                // Seal (default) or any custom downloader package
                 openInExternalDownloader(
                     context,
                     "${ShareDialog.YOUTUBE_FRONTEND_URL}/watch?v=$videoId"

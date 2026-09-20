@@ -8,10 +8,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.session.PlaybackState
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -75,6 +78,7 @@ import com.github.libretube.enums.SbSkipOptions
 import com.github.libretube.enums.ShareObjectType
 import com.github.libretube.extensions.formatShort
 import com.github.libretube.extensions.parcelable
+import com.github.libretube.extensions.toastFromMainThread
 import com.github.libretube.extensions.serializableExtra
 import com.github.libretube.extensions.toID
 import com.github.libretube.extensions.togglePlayPauseState
@@ -87,6 +91,7 @@ import com.github.libretube.helpers.GeminiSubtitleHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.helpers.PlayerHelper
+import com.github.libretube.services.StorageDownloadService
 import com.github.libretube.helpers.PlayerHelper.getCurrentSegment
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.helpers.ThemeHelper
@@ -134,7 +139,8 @@ import kotlin.math.absoluteValue
 
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback {
+class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
+    DownloadHelper.PrimeStorageDownloadHost {
     private var _binding: FragmentPlayerBinding? = null
     val binding get() = _binding!!
 
@@ -266,7 +272,16 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            // PrimeTube: PiP has been removed - nothing PiP related runs on play state changes
+            // PrimeTube: PiP is back - keep the auto-enter params in sync with
+            // playback so swiping home while playing continues in PiP directly
+            if (isPipAvailable() && _binding != null && isAdded) {
+                runCatching {
+                    PictureInPictureCompat.setPictureInPictureParams(
+                        requireActivity(),
+                        pipParams
+                    )
+                }
+            }
 
             if (isPlaying && PlayerHelper.sponsorBlockEnabled) {
                 handler.postDelayed(
@@ -435,6 +450,39 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
                 }
             }
         }
+
+
+    // ----- PrimeTube: "save to storage" download host (phone storage) -----
+    private var pendingStorageVideoId: String? = null
+    private val primeStoragePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val requestedVideoId = pendingStorageVideoId
+            pendingStorageVideoId = null
+            if (granted && requestedVideoId != null) {
+                StorageDownloadService.enqueue(requireContext(), requestedVideoId)
+            } else if (!granted) {
+                toastFromMainThread(getString(R.string.prime_storage_denied))
+            }
+        }
+
+    /**
+     * PrimeTube: saves the media directly into the phone storage
+     * (Downloads/PrimeTube). Android 10+ needs no permission at all - on
+     * Android 8/9 the storage permission is requested on the download tap.
+     */
+    override fun requestPrimeStorageDownload(videoId: String) {
+        val hasPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            StorageDownloadService.enqueue(requireContext(), videoId)
+            return
+        }
+        pendingStorageVideoId = videoId
+        primeStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1192,7 +1240,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         binding.relPlayerDownload.setOnClickListener {
             if (!this::streams.isInitialized) return@setOnClickListener
 
-            DownloadHelper.startDownloadDialog(requireContext(), childFragmentManager, videoId)
+            DownloadHelper.startDownloadDialog(this, childFragmentManager, videoId)
         }
 
         binding.relPlayerScreenshot.setOnClickListener {
@@ -1832,6 +1880,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             // hide and disable exoPlayer controls
             disableController()
 
+            // PrimeTube: clean PiP - only the auto-hiding progress slider
+            binding.player.setPrimePipMode(true)
+
             binding.player.updateCurrentSubtitle(null)
             playerBackgroundBinding.sbSkipBtn.isGone = true
 
@@ -1850,6 +1901,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             activity?.window?.let { window ->
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
+
+            // PrimeTube: leave the clean PiP overlay
+            binding.player.setPrimePipMode(false)
 
             binding.player.useController = true
 
@@ -1894,14 +1948,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             val isPlaying = ::playerController.isInitialized && playerController.isPlaying
 
             PictureInPictureParamsCompat.Builder()
-                .setActions(
-                    PlayerHelper.getPiPModeActions(
-                        requireActivity(),
-                        isPlaying
-                    )
-                )
-                // PrimeTube: never auto-enter PiP - PiP is disabled in PrimeTube
-                .setAutoEnterEnabled(false)
+                // PrimeTube: a CLEAN pip window - no remote action buttons, the
+                // video itself plus the slim auto-hiding progress slider only
+                .setAutoEnterEnabled(isPlaying)
                 .apply {
                     if (isPlaying) {
                         setAspectRatio(playerController.videoSize)
@@ -1911,12 +1960,11 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         }
 
     /**
-     * PrimeTube: PiP has been removed completely (it caused device freezes/lockups on
-     * several devices). Background playback is the way to keep listening outside of
-     * the app - so PiP is never available and never started.
+     * PrimeTube: PiP is back by request - stable, smooth and resizable, with
+     * a clean window: no buttons, just the auto-hiding progress slider.
      */
     private fun isPipAvailable(): Boolean {
-        return false
+        return PictureInPictureCompat.isPictureInPictureAvailable(requireContext())
     }
 
     private fun shouldStartPiP(): Boolean {

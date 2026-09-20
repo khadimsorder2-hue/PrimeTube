@@ -129,10 +129,10 @@ object PreferenceKeys {
     const val EXTERNAL_DOWNLOAD_PROVIDER = "external_download_provider"
 
     /**
-     * PrimeTube: package name used as fallback when no external download
-     * provider is configured. Seal is a popular open-source yt-dlp frontend.
+     * PrimeTube: default download handoff. "storage" saves the media DIRECTLY
+     * into the phone storage (Downloads/PrimeTube) - no external app needed.
      */
-    const val DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER = "com.junkfood.seal"
+    const val DEFAULT_EXTERNAL_DOWNLOAD_PROVIDER = "storage"
 
     // PrimeTube: SAF folder where "Save to storage" downloads are written as MP4 files
     const val MP4_DOWNLOAD_FOLDER = "mp4_download_folder"

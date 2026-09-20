@@ -51,7 +51,7 @@
         <ListPreference
             android:icon="@drawable/ic_open"
             android:key="external_download_provider"
-            android:defaultValue="com.junkfood.seal"
+            android:defaultValue="storage"
             android:entries="@array/download_handoff_entries"
             android:entryValues="@array/download_handoff_values"
             android:summary="@string/download_handoff_summary"

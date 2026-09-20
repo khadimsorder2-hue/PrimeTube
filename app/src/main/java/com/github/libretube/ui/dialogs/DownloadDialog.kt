@@ -27,6 +27,7 @@ import com.github.libretube.helpers.DownloadHelper
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.parcelable.DownloadData
+import com.github.libretube.services.StorageDownloadService
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,11 +51,29 @@ class DownloadDialog : DialogFragment() {
             .setTitle(R.string.download)
             .setView(binding.root)
             .setPositiveButton(R.string.download, null)
+            .setNeutralButton(R.string.save_to_storage, null)
             .setNegativeButton(R.string.cancel, null)
             .show()
             .apply {
                 getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                     onDownloadConfirm.invoke()
+                }
+                // PrimeTube: "save to storage" - writes the media DIRECTLY into
+                // the phone storage (Downloads/PrimeTube): best muxed MP4, or
+                // the best audio file when no video quality is selected
+                getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener {
+                    val videoSelected = binding.videoSpinner.selectedItemPosition > 0
+                    val audioSelected = binding.audioSpinner.selectedItemPosition > 0
+                    if (!videoSelected && !audioSelected) {
+                        Toast.makeText(context, R.string.nothing_selected, Toast.LENGTH_SHORT)
+                            .show()
+                        return@setOnClickListener
+                    }
+                    val audioOnly = !videoSelected
+                    Toast.makeText(context, R.string.prime_saving_to_storage, Toast.LENGTH_SHORT)
+                        .show()
+                    StorageDownloadService.enqueue(requireContext(), videoId, audioOnly)
+                    dismiss()
                 }
             }
     }
