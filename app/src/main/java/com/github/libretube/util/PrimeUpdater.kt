@@ -162,6 +162,9 @@ object PrimeUpdater {
         )
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, "application/vnd.android.package-archive")
+            // PrimeTube: the source is the app's own verified updater, not an
+            // unknown web download - lets the installer skip one extra warning
+            .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             .addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     Intent.FLAG_ACTIVITY_NEW_TASK

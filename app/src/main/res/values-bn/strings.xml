@@ -421,4 +421,6 @@
     <string name="prime_update_installing">ইনস্টলার খোলা হচ্ছে…</string>
     <string name="prime_update_failed">আপডেট চেক করা যায়নি — ইন্টারনেট দেখুন</string>
     <string name="prime_update_no_apk">সর্বশেষ রিলিজে কোনো APK পাওয়া যায়নি</string>
+    <string name="prime_buffer_recover">প্লে আটকে গেছে — ঠিক করা হচ্ছে…</string>
+    <string name="prime_pip_audio_bg">ব্যাকগ্রাউন্ডে শুধু অডিও চালু রাখুন</string>
 </resources>

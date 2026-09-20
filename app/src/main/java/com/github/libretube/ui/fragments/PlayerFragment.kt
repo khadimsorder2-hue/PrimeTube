@@ -58,6 +58,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.session.MediaController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.github.libretube.R
@@ -188,6 +189,10 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
     // check if pip is entered via the dedicated button
     private var isEnteringPiPMode = false
 
+    // PrimeTube: set when the PiP headphone button backgrounded the task on
+    // purpose - the PiP exit handler must NOT pause the player in that case
+    private var primePipAudioBackgroundRequested = false
+
     private val baseActivity get() = activity as AbstractPlayerHostActivity
     private val windowInsetsControllerCompat
         get() = WindowCompat
@@ -307,6 +312,20 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             // PrimeTube: keep the mini player speed toggle label in sync
             if (events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED) && _binding != null) {
                 updateMiniSpeedLabel()
+            }
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            super.onVideoSizeChanged(videoSize)
+            // PrimeTube: keep the PiP window's aspect ratio in sync with the
+            // video so resizing stays smooth and nothing ever gets stretched
+            if (isPipAvailable() && _binding != null && isAdded) {
+                runCatching {
+                    PictureInPictureCompat.setPictureInPictureParams(
+                        requireActivity(),
+                        pipParams
+                    )
+                }
             }
         }
 
@@ -1412,6 +1431,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             closedVideo = false
         }
 
+        // PrimeTube: a background-audio session ended - full video again
+        primePipAudioBackgroundRequested = false
+
         // re-enable the autoplay countdown
         setAutoPlayCountdownEnabled(PlayerHelper.autoPlayCountdown)
 
@@ -1883,7 +1905,11 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             // hide and disable exoPlayer controls
             disableController()
 
-            // PrimeTube: clean PiP - only the auto-hiding progress slider
+            // PrimeTube: clean PiP - only the auto-hiding progress slider and
+            // one small headphone button (audio-only background play)
+            binding.player.onPrimePipAudioClick = {
+                exitPrimePipToAudioBackground()
+            }
             binding.player.setPrimePipMode(true)
 
             binding.player.updateCurrentSubtitle(null)
@@ -1913,8 +1939,14 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             // close button got clicked in PiP mode
             // pause the video and keep the app alive
             if (lifecycle.currentState == Lifecycle.State.CREATED) {
-                playerController.pause()
-                closedVideo = true
+                // PrimeTube: our headphone button backgrounded the task on
+                // purpose - keep the audio running instead of pausing
+                if (primePipAudioBackgroundRequested) {
+                    primePipAudioBackgroundRequested = false
+                } else {
+                    playerController.pause()
+                    closedVideo = true
+                }
             }
 
             binding.player.updateCurrentSubtitle(viewModel.currentCaptionId)
@@ -1929,6 +1961,22 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
     fun onUserLeaveHint() {
         if (shouldStartPiP()) {
             PictureInPictureCompat.enterPictureInPictureMode(requireActivity(), pipParams)
+        }
+    }
+
+    /**
+     * PrimeTube: PiP headphone button - hand the playback over to the audio
+     * player (switchToAudioMode) and dismiss the PiP window by moving the task
+     * to the back. The exact same proven flow as the "background" media action,
+     * so the audio keeps running reliably in the background.
+     */
+    private fun exitPrimePipToAudioBackground() {
+        primePipAudioBackgroundRequested = true
+        switchToAudioMode()
+        // wait some time in order for the service to get started properly
+        handler.postDelayed(500) {
+            pipActivity?.moveTaskToBack(false)
+            pipActivity = null
         }
     }
 

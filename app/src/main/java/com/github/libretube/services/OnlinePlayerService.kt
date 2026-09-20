@@ -94,6 +94,68 @@ open class OnlinePlayerService : AbstractPlayerService() {
     private var sourceErrorRetries = 0
     private var sourceErrorRecovery = false
 
+    /**
+     * PrimeTube: buffering watchdog - a video stuck in STATE_BUFFERING for too
+     * long is brought back to life instead of freezing forever: first a light
+     * re-buffer at the current position, then a full stream re-fetch (the
+     * proven source-error recovery path).
+     */
+    private var bufferStuckSince = -1L
+    private var bufferRecoveries = 0
+    private val bufferWatchdog = object : Runnable {
+        override fun run() {
+            val p = exoPlayer
+            if (p != null && !isTransitioning &&
+                bufferStuckSince > 0 &&
+                p.playbackState == Player.STATE_BUFFERING &&
+                p.playWhenReady
+            ) {
+                val stuckMs = System.currentTimeMillis() - bufferStuckSince
+                if (stuckMs > BUFFER_STUCK_MS && isVideoIdReady()) {
+                    bufferRecoveries++
+                    bufferStuckSince = System.currentTimeMillis()
+                    when {
+                        bufferRecoveries <= 2 -> {
+                            // light recovery: re-buffer at the current position
+                            toastFromMainThread(getString(R.string.prime_buffer_recover))
+                            p.seekTo(p.currentPosition)
+                            p.prepare()
+                            p.play()
+                        }
+
+                        bufferRecoveries <= 4 -> {
+                            // hard recovery: fetch fresh stream URLs, same as the
+                            // source-error path - expired links are often the cause
+                            toastFromMainThread(getString(R.string.prime_source_retry))
+                            sourceErrorRetries = 0
+                            sourceErrorRecovery = true
+                            isPrimeRecovering = true
+                            val resumePosition = p.currentPosition.takeIf { it > 0 } ?: 0L
+                            scope.launch {
+                                delay(600L)
+                                if (sourceErrorRecovery) {
+                                    isTransitioning = true
+                                    startTimestampSeconds =
+                                        (resumePosition / 1000L).takeIf { it > 0 }
+                                    startPlayback()
+                                    exoPlayer?.play()
+                                }
+                            }
+                        }
+
+                        else -> {
+                            // nothing worked - give the network time, then a
+                            // fresh cycle can try again
+                            bufferRecoveries = 0
+                            bufferStuckSince = -1L
+                        }
+                    }
+                }
+            }
+            handler.postDelayed(this, BUFFER_WATCHDOG_TICK_MS)
+        }
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
@@ -107,11 +169,19 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     if (!sourceErrorRecovery) onDestroy()
                 }
 
-                Player.STATE_BUFFERING -> {}
+                Player.STATE_BUFFERING -> {
+                    // PrimeTube: stamp the start so the watchdog can act when
+                    // the buffer never recovers on its own
+                    if (bufferStuckSince <= 0) {
+                        bufferStuckSince = System.currentTimeMillis()
+                    }
+                }
                 Player.STATE_READY -> {
                     sourceErrorRetries = 0
                     sourceErrorRecovery = false
                     isPrimeRecovering = false
+                    bufferStuckSince = -1L
+                    bufferRecoveries = 0
                     // save video to watch history when the video starts playing or is being resumed
                     // waiting for the player to be ready since the video can't be claimed to be watched
                     // while it did not yet start actually, but did buffer only so far
@@ -176,6 +246,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
         trackSelector?.updateParameters {
             setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, isAudioOnlyPlayer)
         }
+
+        // PrimeTube: keep an eye on buffering for the whole session
+        handler.post(bufferWatchdog)
     }
 
     override suspend fun startPlayback() {
@@ -503,3 +576,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
 /** PrimeTube: how many times a playback error triggers a full stream re-fetch. */
 private const val SOURCE_ERROR_MAX_RETRIES = 2
+
+/** PrimeTube: buffering watchdog tuning - 15s stuck, checked every 2s. */
+private const val BUFFER_STUCK_MS = 15_000L
+private const val BUFFER_WATCHDOG_TICK_MS = 2_000L

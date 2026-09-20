@@ -322,6 +322,12 @@ class CustomExoPlayerView(
     private var primePipMode = false
     private var primePipSeekDragging = false
 
+    /**
+     * PrimeTube: invoked when the PiP headphone button is tapped - the player
+     * fragment leaves the PiP window and keeps the audio running in background.
+     */
+    var onPrimePipAudioClick: (() -> Unit)? = null
+
     private val primePipHideRunnable = Runnable {
         backgroundBinding.primePipProgressRoot.isGone = true
     }
@@ -336,6 +342,9 @@ class CustomExoPlayerView(
     }
 
     private fun setupPrimePipProgress() {
+        backgroundBinding.primePipAudioBtn.setOnClickListener {
+            onPrimePipAudioClick?.invoke()
+        }
         backgroundBinding.primePipSeek.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
@@ -370,12 +379,15 @@ class CustomExoPlayerView(
         primePipMode = enabled
         if (enabled) {
             showPrimePipProgress()
+            // PrimeTube: the single small headphone button - audio-only background
+            backgroundBinding.primePipAudioBtn.isVisible = true
             post(primePipTicker)
         } else {
             removeCallbacks(primePipTicker)
             removeCallbacks(primePipHideRunnable)
             primePipSeekDragging = false
             backgroundBinding.primePipProgressRoot.isGone = true
+            backgroundBinding.primePipAudioBtn.isGone = true
         }
     }
 

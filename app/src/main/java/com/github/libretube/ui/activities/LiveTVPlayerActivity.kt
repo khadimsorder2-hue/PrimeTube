@@ -190,6 +190,34 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private var baseBrightness = 0.5f
     private var baseVolume = 0f
 
+    /**
+     * PrimeTube: the buffering ring shows ONLY while the player is really
+     * buffering with playback requested. Any other state - READY, paused,
+     * error, idle - hides it again. Nothing ever spins permanently.
+     */
+    private fun syncLiveBuffering() {
+        val chip = _binding?.liveBuffering ?: return
+        val p = player
+        val shouldShow =
+            p != null &&
+                p.playbackState == Player.STATE_BUFFERING &&
+                p.playWhenReady
+        chip.animate().cancel()
+        if (shouldShow) {
+            chip.isVisible = true
+            chip.animate().alpha(1f).setDuration(180).start()
+        } else if (chip.isVisible || chip.alpha > 0f) {
+            chip.animate()
+                .alpha(0f)
+                .setDuration(140)
+                .withEndAction {
+                    chip.visibility = View.INVISIBLE
+                    chip.alpha = 0f
+                }
+                .start()
+        }
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
@@ -214,26 +242,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     // PrimeTube: stamp the start so the watchdog can act when
                     // the buffer never recovers on its own
                     if (bufferingSince <= 0) bufferingSince = System.currentTimeMillis()
-                    // PrimeTube: premium buffering indicator with a soft fade
-                    _binding?.liveBuffering?.let { chip ->
-                        chip.animate().cancel()
-                        chip.isVisible = true
-                        chip.animate().alpha(1f).setDuration(220).start()
-                    }
+                    syncLiveBuffering()
                 }
 
                 else -> {
-                    // hide the buffering chip again
-                    _binding?.liveBuffering?.let { chip ->
-                        chip.animate().cancel()
-                        chip.animate()
-                            .alpha(0f)
-                            .setDuration(180)
-                            .withEndAction {
-                                chip.visibility = View.INVISIBLE
-                            }
-                            .start()
-                    }
+                    // hide the buffering ring again
+                    syncLiveBuffering()
                 }
             }
         }
@@ -247,6 +261,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     if (isPlaying) R.string.pause else R.string.tooltip_play
                 )
             }
+            // PrimeTube: the buffering ring must NEVER show for a paused player
+            syncLiveBuffering()
             if (isPlaying) {
                 // playing again -> controls may hide after the timeout
                 if (controlsVisible) setControlsVisible(true)

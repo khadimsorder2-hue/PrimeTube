@@ -59,14 +59,19 @@ jobs:
           UNSIGNED=$(ls app/build/outputs/apk/release/*.apk | head -n1)
           echo "Signing: $UNSIGNED"
           "$BT/zipalign" -f -p 4 "$UNSIGNED" app/build/outputs/apk/release/aligned.apk
+          # PrimeTube: sign with ALL schemes (v1+v2+v3) - every OEM installer
+          # (incl. Xiaomi) accepts the package without signature warnings
           "$BT/apksigner" sign \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
             --ks "$RUNNER_TEMP/primetube.keystore" \
             --ks-key-alias primetube \
             --ks-pass "pass:$STORE_PASS" \
             --key-pass "pass:$STORE_PASS" \
             --out PrimeTube-v32.1-release.apk \
             app/build/outputs/apk/release/aligned.apk
-          "$BT/apksigner" verify --print-certs PrimeTube-v32.1-release.apk
+          "$BT/apksigner" verify --verbose --print-certs PrimeTube-v32.1-release.apk
 
       - name: Create changelog
         id: changelog
