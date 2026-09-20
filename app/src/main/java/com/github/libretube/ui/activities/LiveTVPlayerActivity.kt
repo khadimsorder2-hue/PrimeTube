@@ -264,6 +264,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         p.prepare()
         p.play()
         everStarted = true
+        // PrimeTube: remember the channel for the "recently watched" section
+        LiveTvHelper.recordRecent(applicationContext, channel.name)
         syncQueueHighlight()
         setControlsVisible(true)
     }
@@ -375,11 +377,22 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     // ---------- channels side panel ----------
 
     private fun setupQueuePanel() {
-        val adapter = LiveTVAdapter { _, index ->
-            binding.liveQueueRoot.isGone = true
-            resetChannelSearch()
-            playChannel(index)
-        }
+        val appContext = applicationContext
+        val adapter = LiveTVAdapter(
+            onClick = { channel, _ ->
+                binding.liveQueueRoot.isGone = true
+                resetChannelSearch()
+                // PrimeTube: the panel is sorted - resolve the real index by URL
+                val index = channels.indexOfFirst { it.url == channel.url }
+                if (index >= 0) playChannel(index)
+            },
+            onFavoriteToggle = { channel ->
+                LiveTvHelper.toggleFavorite(appContext, channel.name)
+                queueAdapter?.setFavorites(LiveTvHelper.getFavoriteNames(appContext))
+                refreshPanelList()
+            }
+        )
+        adapter.setFavorites(LiveTvHelper.getFavoriteNames(appContext))
         // PrimeTube: search inside the channels playlist
         binding.liveQueueSearch.doAfterTextChanged { editable ->
             applyChannelFilter(editable?.toString().orEmpty())
@@ -387,22 +400,33 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveQueueRecycler.layoutManager = SafeLinearLayoutManager(this)
         binding.liveQueueRecycler.adapter = adapter
         queueAdapter = adapter
-        adapter.submitList(channels)
+        refreshPanelList()
         syncQueueHighlight()
+    }
+
+    /**
+     * PrimeTube: fills the channels panel - favorites first, then recently
+     * watched, then the playlist order; the search field narrows it down.
+     */
+    private fun refreshPanelList() {
+        val appContext = applicationContext
+        val sorted = LiveTvHelper.sortChannels(appContext, channels)
+        val query = binding.liveQueueSearch.text?.toString()?.trim().orEmpty()
+        queueAdapter?.submitList(
+            if (query.isEmpty()) {
+                sorted
+            } else {
+                sorted.filter {
+                    it.name.contains(query, ignoreCase = true) ||
+                        it.group?.contains(query, ignoreCase = true) == true
+                }
+            }
+        )
     }
 
     /** PrimeTube: filter the channel cards by name/group, blank shows all. */
     private fun applyChannelFilter(query: String) {
-        val q = query.trim()
-        val list = if (q.isEmpty()) {
-            channels
-        } else {
-            channels.filter {
-                it.name.contains(q, ignoreCase = true) ||
-                    it.group?.contains(q, ignoreCase = true) == true
-            }
-        }
-        queueAdapter?.submitList(list)
+        refreshPanelList()
     }
 
     private fun resetChannelSearch() {
@@ -419,7 +443,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             return
         }
         resetChannelSearch()
-        queueAdapter?.submitList(channels)
+        refreshPanelList()
         syncQueueHighlight()
 
         // PrimeTube: same 25% transparent corner panel as the YouTube player

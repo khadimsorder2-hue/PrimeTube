@@ -65,23 +65,34 @@ class LiveTVFragment : Fragment(R.layout.fragment_live_tv) {
             }
         }
 
-    private val adapter = LiveTVAdapter { channel, _ ->
-        // PrimeTube: resolve the index from the FULL list - the grid may be
-        // sorted (favorites first), so the adapter position is not the index
-        val ctx = context ?: return@LiveTVAdapter
-        startActivity(
-            Intent(ctx, LiveTVPlayerActivity::class.java)
-                .putExtra(
-                    LiveTVPlayerActivity.EXTRA_INDEX,
-                    fullChannels.indexOfFirst { it.url == channel.url }
-                )
-                .putExtra(LiveTVPlayerActivity.EXTRA_NAME, channel.name)
-                .putExtra(LiveTVPlayerActivity.EXTRA_URL, channel.url)
-                .putExtra(LiveTVPlayerActivity.EXTRA_LOGO, channel.logo)
-        )
-    }
+    private val adapter = LiveTVAdapter(
+        onClick = { channel, _ ->
+            // PrimeTube: resolve the index from the FULL list - the grid may be
+            // sorted (favorites first), so the adapter position is not the index
+            val ctx = context ?: return@LiveTVAdapter
+            startActivity(
+                Intent(ctx, LiveTVPlayerActivity::class.java)
+                    .putExtra(
+                        LiveTVPlayerActivity.EXTRA_INDEX,
+                        fullChannels.indexOfFirst { it.url == channel.url }
+                    )
+                    .putExtra(LiveTVPlayerActivity.EXTRA_NAME, channel.name)
+                    .putExtra(LiveTVPlayerActivity.EXTRA_URL, channel.url)
+                    .putExtra(LiveTVPlayerActivity.EXTRA_LOGO, channel.logo)
+            )
+        },
+        onFavoriteToggle = { channel -> toggleFavorite(channel) }
+    )
 
     private var fullChannels: List<LiveChannel> = emptyList()
+
+    /** PrimeTube: star toggle - re-sorts so favorites move to the top. */
+    private fun toggleFavorite(channel: LiveChannel) {
+        val context = context ?: return
+        LiveTvHelper.toggleFavorite(context, channel.name)
+        adapter.setFavorites(LiveTvHelper.getFavoriteNames(context))
+        adapter.submitList(LiveTvHelper.sortChannels(context, fullChannels))
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -137,7 +148,8 @@ class LiveTVFragment : Fragment(R.layout.fragment_live_tv) {
             val b = _binding ?: return@launch
             loaded = channels.isNotEmpty()
             fullChannels = channels
-            adapter.submitList(channels)
+            adapter.setFavorites(LiveTvHelper.getFavoriteNames(context.applicationContext))
+            adapter.submitList(LiveTvHelper.sortChannels(context.applicationContext, channels))
             b.liveSwipe.isRefreshing = false
             b.liveProgress.isVisible = false
             b.liveError.isVisible = channels.isEmpty()

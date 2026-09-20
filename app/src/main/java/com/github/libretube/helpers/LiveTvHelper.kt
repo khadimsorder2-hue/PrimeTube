@@ -42,7 +42,10 @@ object LiveTvHelper {
     private const val PREFS = "primetube_live_tv"
     private const val KEY_SOURCES = "sources"
     private const val KEY_ACTIVE = "active"
+    private const val KEY_FAVORITES = "favorites"
+    private const val KEY_RECENT = "recent"
     private const val CACHE_PREFIX = "primetube_live_"
+    private const val RECENT_LIMIT = 12
 
     /** PrimeTube: one user-configured Live TV playlist source. */
     data class LiveTvSource(
@@ -229,5 +232,61 @@ object LiveTvHelper {
                 }
             }
         }.getOrDefault("")
+    }
+
+    // ---------------- favorites & recently watched ----------------
+
+    /** PrimeTube: names of the starred (favorite) channels. */
+    fun getFavoriteNames(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_FAVORITES, emptySet()).orEmpty()
+
+    fun isFavorite(context: Context, name: String): Boolean =
+        getFavoriteNames(context).contains(name)
+
+    /** Toggles the star of a channel, returns true when it is now a favorite. */
+    fun toggleFavorite(context: Context, name: String): Boolean {
+        if (name.isBlank()) return false
+        val favorites = getFavoriteNames(context).toMutableSet()
+        val added = if (favorites.contains(name)) {
+            favorites.remove(name)
+            false
+        } else {
+            favorites.add(name)
+            true
+        }
+        prefs(context).edit().putStringSet(KEY_FAVORITES, favorites).apply()
+        return added
+    }
+
+    /** PrimeTube: most recently watched channel names (newest first). */
+    fun getRecentNames(context: Context): List<String> = runCatching {
+        val array = JSONArray(prefs(context).getString(KEY_RECENT, "[]").orEmpty())
+        (0 until array.length()).mapNotNull { index ->
+            array.optString(index).takeIf { it.isNotBlank() }
+        }
+    }.getOrDefault(emptyList())
+
+    /** Records a channel as watched (newest first, de-duplicated, capped). */
+    fun recordRecent(context: Context, name: String) {
+        if (name.isBlank()) return
+        val recent = getRecentNames(context).toMutableList()
+        recent.remove(name)
+        recent.add(0, name)
+        while (recent.size > RECENT_LIMIT) recent.removeAt(recent.size - 1)
+        prefs(context).edit().putString(KEY_RECENT, JSONArray(recent).toString()).apply()
+    }
+
+    /**
+     * Premium ordering used by the grid and the channels panel:
+     * favorites first (newest watched on top), then recently watched,
+     * then everything else in playlist order.
+     */
+    fun sortChannels(context: Context, channels: List<LiveChannel>): List<LiveChannel> {
+        val favorites = getFavoriteNames(context)
+        val recent = getRecentNames(context)
+        return channels.sortedWith(
+            compareBy<LiveChannel> { if (favorites.contains(it.name)) 0 else 1 }
+                .thenBy { recent.indexOf(it.name).let { r -> if (r < 0) Int.MAX_VALUE else r } }
+        )
     }
 }

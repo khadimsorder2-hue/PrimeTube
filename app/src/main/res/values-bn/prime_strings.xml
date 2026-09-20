@@ -59,4 +59,5 @@
     <string name="prime_source_deleted">সোর্স মুছে ফেলা হয়েছে</string>
     <string name="prime_source_invalid">সঠিক নাম/লিংক দিন বা ফাইল বাছুন</string>
     <string name="prime_source_load_failed">এই প্লেলিস্ট সোর্স লোড করা যায়নি</string>
+    <string name="prime_favorite">প্রিয় চ্যানেল</string>
 </resources>

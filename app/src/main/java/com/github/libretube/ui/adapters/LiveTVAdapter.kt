@@ -15,11 +15,16 @@ import com.github.libretube.ui.viewholders.LiveTVViewHolder
 import java.util.Locale
 
 class LiveTVAdapter(
-    private val onClick: (LiveChannel, Int) -> Unit
+    private val onClick: (LiveChannel, Int) -> Unit,
+    /** PrimeTube: called when the star of a channel card is tapped. */
+    private val onFavoriteToggle: ((LiveChannel) -> Unit)? = null
 ) : RecyclerView.Adapter<LiveTVViewHolder>() {
 
     private var channels: List<LiveChannel> = emptyList()
     private var currentUrl: String? = null
+
+    /** PrimeTube: names of the favorite channels (stars). */
+    private var favoriteNames: Set<String> = emptySet()
 
     @SuppressLint("NotifyDataSetChanged")
     fun submitList(list: List<LiveChannel>) {
@@ -32,6 +37,14 @@ class LiveTVAdapter(
     fun setCurrentUrl(url: String?) {
         if (currentUrl == url) return
         currentUrl = url
+        notifyDataSetChanged()
+    }
+
+    /** PrimeTube: update the star states without touching the list itself. */
+    @SuppressLint("NotifyDataSetChanged")
+    fun setFavorites(names: Set<String>) {
+        if (favoriteNames == names) return
+        favoriteNames = names
         notifyDataSetChanged()
     }
 
@@ -64,6 +77,21 @@ class LiveTVAdapter(
             } else {
                 channelCard.strokeWidth = (root.resources.displayMetrics.density * 1).toInt()
                 channelCard.strokeColor = Color.parseColor("#2A2A2A")
+            }
+
+            // PrimeTube: premium favorite star - red when starred, dim white otherwise
+            val isFavorite = favoriteNames.contains(channel.name)
+            channelFav.setColorFilter(
+                if (isFavorite) {
+                    ContextCompat.getColor(root.context, R.color.red_md_theme_light_primary)
+                } else {
+                    Color.parseColor("#CCFFFFFF")
+                }
+            )
+            channelFav.alpha = if (isFavorite) 1f else 0.7f
+            channelFav.setOnClickListener {
+                it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                onFavoriteToggle?.invoke(channel)
             }
 
             root.setOnClickListener { onClick(channel, position) }

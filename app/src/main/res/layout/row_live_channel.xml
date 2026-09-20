@@ -67,6 +67,19 @@
                 android:contentDescription="@string/prime_live_tv"
                 android:src="@drawable/prime_live_dot"
                 android:elevation="3dp" />
+
+            <!-- PrimeTube: favorite (star) toggle of the channel -->
+            <ImageView
+                android:id="@+id/channelFav"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="6dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/prime_favorite"
+                android:padding="3dp"
+                android:elevation="4dp"
+                android:src="@drawable/prime_ic_star" />
         </FrameLayout>
 
         <LinearLayout
