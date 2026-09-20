@@ -629,6 +629,11 @@
     <string name="prime_live_fill">Full screen (fill)</string>
     <string name="prime_live_fit">Fit screen</string>
     <string name="prime_live_auto">Auto</string>
+    <string name="prime_chip_fill">Fill</string>
+    <string name="prime_chip_fit">Fit</string>
+    <string name="prime_chip_quality">Quality</string>
+    <string name="prime_chip_channels">Channels</string>
+    <string name="prime_search_hint">Search playlist…</string>
     <string name="prime_live_no_quality">No quality options for this channel</string>
     <string name="tooltip_filter">Filter</string>
     <string name="tooltip_edit_groups">Edit groups</string>

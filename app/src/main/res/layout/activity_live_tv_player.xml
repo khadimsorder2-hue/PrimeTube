@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PrimeTube: YouTube-like full-screen player for Live TV (IPTV) channels -->
+<!-- PrimeTube: YouTube-like full-screen player for Live TV (IPTV) channels.
+     Nothing sits on the video: one tap reveals all controls for 5 s, then
+     everything auto-hides again. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -12,124 +14,204 @@
         android:id="@+id/livePlayerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true"
         app:resize_mode="fill"
         app:show_buffering="when_playing"
         app:surface_type="surface_view"
-        app:use_controller="true" />
+        app:use_controller="false" />
 
-    <!-- top bar row 1: back + channel name + logo -->
-    <LinearLayout
+    <!-- PrimeTube: the full control overlay, hidden until the user taps -->
+    <FrameLayout
+        android:id="@+id/liveControlsRoot"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:layout_marginTop="6dp"
-        android:background="#44000000"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp">
+        android:layout_height="match_parent">
 
-        <ImageView
-            android:id="@+id/liveBack"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:contentDescription="@string/prime_live_tv"
-            android:padding="8dp"
-            android:src="@drawable/prime_live_back"
-            app:tint="@android:color/white" />
+        <!-- PrimeTube: click sink FIRST (behind everything) so taps on empty
+             areas close the overlay while buttons on top keep working -->
+        <View
+            android:id="@+id/liveControlsSink"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true" />
 
-        <TextView
-            android:id="@+id/liveTitle"
-            android:layout_width="0dp"
+        <!-- top scrim + row: back, logo, title, LIVE badge -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_gravity="top"
+            android:background="@drawable/player_scrim_top" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:shadowColor="#B3000000"
-            android:shadowRadius="4"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:layout_gravity="top"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp">
 
-        <!-- PrimeTube: red LIVE badge like YouTube -->
-        <TextView
-            android:layout_width="wrap_content"
+            <ImageView
+                android:id="@+id/liveBack"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/prime_live_tv"
+                android:padding="9dp"
+                android:src="@drawable/prime_live_back"
+                app:tint="@android:color/white" />
+
+            <ImageView
+                android:id="@+id/liveLogo"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/prime_chip_bg"
+                android:contentDescription="@string/prime_live_tv"
+                android:padding="4dp"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/liveTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:shadowColor="#B3000000"
+                android:shadowRadius="4"
+                android:textColor="@android:color/white"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <!-- PrimeTube: red LIVE badge like YouTube -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/prime_live_number_bg"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
+                android:text="@string/prime_live_badge"
+                android:textColor="@android:color/white"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- bottom scrim + controls: prev / play / next + chips -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/player_scrim_bottom" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:background="@drawable/prime_live_number_bg"
-            android:paddingHorizontal="7dp"
-            android:paddingVertical="2dp"
-            android:text="@string/prime_live_badge"
-            android:textColor="@android:color/white"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:layout_gravity="bottom"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingBottom="22dp">
 
-        <ImageView
-            android:id="@+id/liveLogo"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:contentDescription="@string/prime_live_tv"
-            android:padding="2dp" />
-    </LinearLayout>
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-    <!-- top bar row 2: prev / next / fill / quality / playlist -->
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="56dp"
-        android:layout_marginEnd="6dp"
-        android:background="#59000000"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="4dp">
+                <ImageView
+                    android:id="@+id/livePrev"
+                    android:layout_width="54dp"
+                    android:layout_height="54dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/prime_live_prev_channel"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_prev"
+                    app:tint="@android:color/white" />
 
-        <ImageButton
-            android:id="@+id/livePrev"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/prime_live_prev_channel"
-            android:src="@drawable/ic_prev"
-            app:tint="@android:color/white" />
+                <ImageView
+                    android:id="@+id/liveCenterPlay"
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:layout_marginHorizontal="26dp"
+                    android:background="@drawable/prime_chip_bg"
+                    android:contentDescription="@string/pause"
+                    android:padding="18dp"
+                    android:src="@drawable/ic_pause_filled"
+                    app:tint="@android:color/white" />
 
-        <ImageButton
-            android:id="@+id/liveNext"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/prime_live_next_channel"
-            android:src="@drawable/ic_next"
-            app:tint="@android:color/white" />
+                <ImageView
+                    android:id="@+id/liveNext"
+                    android:layout_width="54dp"
+                    android:layout_height="54dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/prime_live_next_channel"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_next"
+                    app:tint="@android:color/white" />
+            </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/liveFill"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/prime_live_fill"
-            android:src="@drawable/ic_fill"
-            app:tint="@android:color/white" />
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-        <ImageButton
-            android:id="@+id/liveQuality"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/quality"
-            android:src="@drawable/ic_hd"
-            app:tint="@android:color/white" />
+                <TextView
+                    android:id="@+id/liveFillChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/prime_chip_bg"
+                    android:contentDescription="@string/prime_live_fill"
+                    android:drawablePadding="6dp"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/prime_live_fill"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:drawableStartCompat="@drawable/ic_fill"
+                    app:drawableTint="@android:color/white" />
 
-        <ImageButton
-            android:id="@+id/liveQueue"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/prime_live_channels"
-            android:src="@drawable/ic_queue"
-            app:tint="@android:color/white" />
-    </LinearLayout>
+                <TextView
+                    android:id="@+id/liveQualityChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/prime_chip_bg"
+                    android:contentDescription="@string/quality"
+                    android:drawablePadding="6dp"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/prime_live_auto"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:drawableStartCompat="@drawable/ic_hd"
+                    app:drawableTint="@android:color/white" />
+
+                <TextView
+                    android:id="@+id/liveQueueChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/prime_chip_bg"
+                    android:contentDescription="@string/prime_live_channels"
+                    android:drawablePadding="6dp"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/prime_live_channels"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:drawableStartCompat="@drawable/ic_queue"
+                    app:drawableTint="@android:color/white" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- PrimeTube: brightness / volume gesture indicator pill -->
     <TextView
@@ -146,7 +228,7 @@
         android:visibility="gone"
         tools:text="Brightness 50%" />
 
-    <!-- PrimeTube: channels side panel (translucent, close button) -->
+    <!-- PrimeTube: channels side panel (transparent, close button) -->
     <FrameLayout
         android:id="@+id/liveQueueRoot"
         android:layout_width="match_parent"
@@ -260,7 +342,7 @@
             android:id="@+id/liveNoInternetRetry"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="12dp"
             android:text="@string/retry" />
     </LinearLayout>
 </FrameLayout>

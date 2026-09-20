@@ -75,6 +75,10 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var queueAdapter: LiveTVAdapter? = null
 
+    // PrimeTube: tap-to-show controls that auto-hide after 5 s
+    private var controlsVisible = false
+    private val hideControlsRunnable = Runnable { setControlsVisible(false) }
+
     // gesture state
     private var gestureActive = false
     private var gestureBrightness = false
@@ -90,6 +94,24 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                 autoHops = 0
                 _binding?.livePlayerError?.isVisible = false
                 syncQueueHighlight()
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            _binding?.let { b ->
+                b.liveCenterPlay.setImageResource(
+                    if (isPlaying) R.drawable.ic_pause_filled else R.drawable.ic_play_filled
+                )
+                b.liveCenterPlay.contentDescription = getString(
+                    if (isPlaying) R.string.pause else R.string.play
+                )
+            }
+            if (isPlaying) {
+                // playing again -> controls may hide after the timeout
+                if (controlsVisible) setControlsVisible(true)
+            } else {
+                // paused -> keep the controls on screen (YouTube behavior)
+                setControlsVisible(true)
             }
         }
 
@@ -129,10 +151,12 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         binding.liveNext.setOnClickListener { skipChannel(+1) }
         binding.livePlayerRetry.setOnClickListener { retryNow() }
         binding.liveNoInternetRetry.setOnClickListener { retryNow() }
-        binding.liveFill.setOnClickListener { toggleFillMode() }
-        binding.liveQuality.setOnClickListener { showQualityDialog() }
-        binding.liveQueue.setOnClickListener { toggleQueuePanel() }
+        binding.liveFillChip.setOnClickListener { toggleFillMode() }
+        binding.liveQualityChip.setOnClickListener { showQualityDialog() }
+        binding.liveQueueChip.setOnClickListener { toggleQueuePanel() }
         binding.liveQueueClose.setOnClickListener { binding.liveQueueRoot.isGone = true }
+        binding.liveCenterPlay.setOnClickListener { togglePlayback() }
+        binding.liveControlsSink.setOnClickListener { setControlsVisible(false) }
 
         setupGestures()
         loadChannelsAndStart()
@@ -197,6 +221,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     ?: cached.indexOfFirst { it.url == startUrl }.takeIf { it >= 0 }
                     ?: 0
             }
+            _binding?.liveQueueChip?.text =
+                getString(R.string.prime_chip_channels) + " \u00b7 " + channels.size
             if (player == null) player = buildPlayer()
             if (currentIndex !in channels.indices) currentIndex = 0
             playChannel(currentIndex)
@@ -235,6 +261,26 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         p.play()
         everStarted = true
         syncQueueHighlight()
+        setControlsVisible(true)
+    }
+
+    // ---------- controls overlay: nothing on screen until tapped, 5 s auto-hide ----------
+
+    private fun setControlsVisible(visible: Boolean) {
+        controlsVisible = visible
+        _binding?.liveControlsRoot?.isVisible = visible
+        handler.removeCallbacks(hideControlsRunnable)
+        // auto-hide only while actually playing - paused keeps controls visible
+        if (visible && player?.isPlaying == true) {
+            handler.postDelayed(hideControlsRunnable, CONTROLS_TIMEOUT_MS)
+        }
+    }
+
+    private fun toggleControls() = setControlsVisible(!controlsVisible)
+
+    private fun togglePlayback() {
+        val p = player ?: return
+        if (p.isPlaying) p.pause() else p.play()
     }
 
     private fun updateHeaderLogo() {
@@ -277,6 +323,8 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         } else {
             AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
+        binding.liveFillChip.text =
+            getString(if (isFillMode) R.string.prime_chip_fill else R.string.prime_chip_fit)
         toast(if (isFillMode) R.string.prime_live_fill else R.string.prime_live_fit)
     }
 
@@ -305,6 +353,11 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             .setTitle(R.string.quality)
             .setSingleChoiceItems(options.toTypedArray(), checked) { dialog, which ->
                 lockedQualityHeight = if (which == 0) Int.MAX_VALUE else available[which - 1]
+                binding.liveQualityChip.text = if (which == 0) {
+                    getString(R.string.prime_live_auto)
+                } else {
+                    "${lockedQualityHeight} p"
+                }
                 p.trackSelectionParameters = p.trackSelectionParameters
                     .buildUpon()
                     .setMaxVideoSize(Int.MAX_VALUE, lockedQualityHeight)
@@ -396,6 +449,15 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                         gestureActive = false
                         handler.postDelayed({ _binding?.liveGesturePill?.isGone = true }, 700)
                         true
+                    } else if (event.actionMasked == MotionEvent.ACTION_UP) {
+                        // PrimeTube: a clean tap (no gesture) toggles the controls
+                        val moved = abs(event.x - gestureStartX) + abs(event.y - gestureStartY)
+                        if (moved < 60) {
+                            toggleControls()
+                            true
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
@@ -464,6 +526,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     companion object {
         /** PrimeTube: stop auto-hopping after this many dead channels in a row. */
         private const val MAX_AUTO_HOPS = 4
+
+        /** PrimeTube: controls auto-hide timeout (YouTube uses ~3-5 s). */
+        private const val CONTROLS_TIMEOUT_MS = 5_000L
 
         /** PrimeTube: browser-like UA so IPTV servers with UA filters let us through. */
         private const val USER_AGENT =

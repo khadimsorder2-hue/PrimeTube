@@ -30,4 +30,9 @@
     <string name="prime_live_auto">অটো</string>
     <string name="prime_live_no_quality">এই চ্যানেলের জন্য কোয়ালিটি অপশন নেই</string>
     <string name="prime_google_login_note">দ্রষ্টব্য: তৃতীয় পক্ষের YouTube অ্যাপে Google/YouTube অ্যাকাউন্ট দিয়ে লগইন করা সম্ভব না — YouTube এটা ব্লক করে। PrimeTube-এর নিজস্ব অ্যাকাউন্ট (প্রতি instance-এ) ১০ সেকেন্ডে খোলা যায়, যাতে subscription, playlist ও history sync কাজ করে।</string>
+    <string name="prime_chip_fill">ফিল</string>
+    <string name="prime_chip_fit">ফিট</string>
+    <string name="prime_chip_quality">কোয়ালিটি</string>
+    <string name="prime_chip_channels">চ্যানেল</string>
+    <string name="prime_search_hint">প্লেলিস্ট খুঁজুন…</string>
 </resources>
