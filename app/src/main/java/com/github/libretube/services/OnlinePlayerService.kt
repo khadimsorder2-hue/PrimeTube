@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.SubtitleConfiguration
 import androidx.media3.common.MimeTypes
@@ -130,7 +131,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
         override fun onPlayerError(error: PlaybackException) {
             // PrimeTube: auto-recover from "source error" - expired stream URLs are
             // the usual culprit. Re-fetch the streams and resume where it stopped.
-            if (sourceErrorRetries < SOURCE_ERROR_MAX_RETRIES && ::videoId.isInitialized) {
+            if (sourceErrorRetries < SOURCE_ERROR_MAX_RETRIES && this@OnlinePlayerService::videoId.isInitialized) {
                 sourceErrorRetries++
                 sourceErrorRecovery = true
                 isPrimeRecovering = true

@@ -79,7 +79,7 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
     lateinit var videoId: String
 
     var isTransitioning = false
-        private set
+        protected set
 
     val handler = Handler(Looper.getMainLooper())
 

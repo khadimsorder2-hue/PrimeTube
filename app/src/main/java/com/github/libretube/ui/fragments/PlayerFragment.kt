@@ -91,6 +91,7 @@ import com.github.libretube.helpers.GeminiSubtitleHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.helpers.PlayerHelper
+import com.github.libretube.helpers.PrimeStorageDownloadHost
 import com.github.libretube.services.StorageDownloadService
 import com.github.libretube.helpers.PlayerHelper.getCurrentSegment
 import com.github.libretube.helpers.PreferenceHelper
@@ -140,7 +141,7 @@ import kotlin.math.absoluteValue
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
-    DownloadHelper.PrimeStorageDownloadHost {
+    PrimeStorageDownloadHost {
     private var _binding: FragmentPlayerBinding? = null
     val binding get() = _binding!!
 
@@ -461,7 +462,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             if (granted && requestedVideoId != null) {
                 StorageDownloadService.enqueue(requireContext(), requestedVideoId)
             } else if (!granted) {
-                toastFromMainThread(getString(R.string.prime_storage_denied))
+                context?.let { ctx ->
+                    ctx.toastFromMainThread(ctx.getString(R.string.prime_storage_denied))
+                }
             }
         }
 

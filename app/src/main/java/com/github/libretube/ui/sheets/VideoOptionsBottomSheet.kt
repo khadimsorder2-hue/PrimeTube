@@ -25,6 +25,7 @@ import com.github.libretube.services.StorageDownloadService
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PreferenceHelper
+import com.github.libretube.helpers.PrimeStorageDownloadHost
 import com.github.libretube.obj.ShareData
 import com.github.libretube.parcelable.PlayerData
 import com.github.libretube.ui.activities.MainActivity
@@ -42,7 +43,7 @@ import kotlinx.coroutines.withContext
  *
  * Needs the [streamItem] to load the content from the right video.
  */
-class VideoOptionsBottomSheet : BaseBottomSheet(), DownloadHelper.PrimeStorageDownloadHost {
+class VideoOptionsBottomSheet : BaseBottomSheet(), PrimeStorageDownloadHost {
     private lateinit var streamItem: StreamItem
 
     // ----- PrimeTube: "save to storage" download host (phone storage) -----
@@ -54,7 +55,9 @@ class VideoOptionsBottomSheet : BaseBottomSheet(), DownloadHelper.PrimeStorageDo
             if (granted && requestedVideoId != null) {
                 StorageDownloadService.enqueue(requireContext(), requestedVideoId)
             } else if (!granted) {
-                context?.let { toastFromMainThread(it.getString(R.string.prime_storage_denied)) }
+                context?.let { ctx ->
+                    ctx.toastFromMainThread(ctx.getString(R.string.prime_storage_denied))
+                }
             }
         }
 
