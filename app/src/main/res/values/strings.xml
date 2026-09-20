@@ -740,6 +740,7 @@
     <string name="prime_ai_key_help">Get a free API key</string>
     <string name="prime_ai_key_help_summary">aistudio.google.com/apikey - Create API key, then paste it below</string>
     <string name="prime_ai_model">Gemini model</string>
+    <string name="prime_ai_default_model">gemini-2.5-flash</string>
     <string name="prime_ai_translating">Translating subtitles to Bangla…</string>
     <string name="prime_ai_done">Bangla subtitles ready</string>
     <string name="prime_ai_failed">AI subtitle translation failed - check your Gemini API key and model</string>

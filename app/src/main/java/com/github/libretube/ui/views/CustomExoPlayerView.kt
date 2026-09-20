@@ -17,6 +17,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.text.format.DateUtils
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.PixelCopy
@@ -66,6 +67,7 @@ import com.github.libretube.extensions.togglePlayPauseState
 import com.github.libretube.extensions.updateIfChanged
 import com.github.libretube.helpers.AudioHelper
 import com.github.libretube.helpers.BrightnessHelper
+import com.github.libretube.helpers.GeminiSubtitleHelper
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.helpers.WindowHelper
@@ -194,6 +196,17 @@ class CustomExoPlayerView(
         }
     )
 
+    // PrimeTube: AI (Gemini) Bangla subtitle overlay - our own TextView so
+    // the translated cues share the free-form behavior of the captions
+    private var aiCues: List<GeminiSubtitleHelper.AiCue> = emptyList()
+    private val aiSubtitleView: TextView = TextView(context).apply {
+        gravity = Gravity.CENTER_HORIZONTAL
+        setTextColor(Color.WHITE)
+        setShadowLayer(6f, 0f, 2f, 0xB3000000.toInt())
+        setPadding(48f.dpToPx(), 8f.dpToPx(), 48f.dpToPx(), 12f.dpToPx())
+        visibility = View.GONE
+    }
+
     private fun toggleController(show: Boolean = !isControllerFullyVisible) {
         if (show) showController() else hideController()
     }
@@ -228,6 +241,18 @@ class CustomExoPlayerView(
     init {
         brightnessHelper = BrightnessHelper(activity)
         playerGestureController = PlayerGestureController(activity, this)
+
+        // PrimeTube: the AI subtitle overlay lives inside the content frame so
+        // it stays with the video (under the controls, over the surface)
+        backgroundBinding.exoContentFrame.addView(
+            aiSubtitleView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            )
+        )
+
         audioHelper = AudioHelper(context)
         fullscreenGestureAnimationController = FullscreenGestureAnimationController(
             playerView = this,
@@ -1534,6 +1559,7 @@ class CustomExoPlayerView(
         val height = height.takeIf { it > 0 } ?: return
         val translation = subtitleOffsetFraction * height
         subtitleView?.translationY = translation
+        aiSubtitleView.translationY = translation
     }
 
     private fun applySubtitleTextSize() {
@@ -1661,7 +1687,54 @@ class CustomExoPlayerView(
             )
         binding.timeLeft.text = "-${DateUtils.formatElapsedTime(timeLeft)}"
 
+        // PrimeTube: keep the AI (Bangla) subtitle overlay in sync
+        updateAiSubtitle()
+
         runnableHandler.postDelayed(100, UPDATE_POSITION_TOKEN, this::updateCurrentPosition)
+    }
+
+    /** PrimeTube: pick and show the AI subtitle cue for the current position. */
+    private fun updateAiSubtitle() {
+        if (aiCues.isEmpty()) return
+        val position = player?.currentPosition ?: return
+        val cue = aiCues.firstOrNull { position >= it.startMs && position < it.endMs }
+        if (cue != null) {
+            if (aiSubtitleView.text.toString() != cue.text) aiSubtitleView.text = cue.text
+            if (!aiSubtitleView.isVisible) {
+                aiSubtitleView.isVisible = true
+                applySubtitleTransform()
+            }
+        } else if (aiSubtitleView.isVisible) {
+            aiSubtitleView.isVisible = false
+        }
+    }
+
+    /**
+     * PrimeTube: render AI translated (Bangla) subtitle cues. The ExoPlayer
+     * caption track rendering is disabled while the AI overlay is active so
+     * the two never run in parallel.
+     */
+    fun setAiSubtitleCues(cues: List<GeminiSubtitleHelper.AiCue>) {
+        aiCues = cues
+        aiSubtitleView.isVisible = false
+        runCatching {
+            player?.trackSelectionParameters = player?.trackSelectionParameters
+                ?.buildUpon()
+                ?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                ?.build()
+        }
+    }
+
+    /** PrimeTube: back to the original captions. */
+    fun clearAiSubtitles() {
+        aiCues = emptyList()
+        aiSubtitleView.isVisible = false
+        runCatching {
+            player?.trackSelectionParameters = player?.trackSelectionParameters
+                ?.buildUpon()
+                ?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                ?.build()
+        }
     }
 
     /**

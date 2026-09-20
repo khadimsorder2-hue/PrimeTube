@@ -194,6 +194,31 @@
             app:key="prime_subtitle_transparent"
             app:title="@string/prime_subtitle_transparent" />
 
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:icon="@drawable/ic_translate"
+            android:summary="@string/prime_ai_subtitles_summary"
+            app:key="prime_ai_subtitles"
+            app:title="@string/prime_ai_subtitles" />
+
+        <Preference
+            android:icon="@drawable/ic_info"
+            android:summary="@string/prime_ai_key_help_summary"
+            app:title="@string/prime_ai_key_help" />
+
+        <EditTextPreference
+            android:icon="@drawable/ic_info"
+            app:key="prime_ai_api_key"
+            app:title="@string/prime_ai_api_key"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="@string/prime_ai_default_model"
+            android:icon="@drawable/ic_speed"
+            app:key="prime_ai_model"
+            app:title="@string/prime_ai_model"
+            app:useSimpleSummaryProvider="true" />
+
     </PreferenceCategory>
 
 </PreferenceScreen>
