@@ -7,17 +7,20 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.RectF
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.text.format.DateUtils
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.PixelCopy
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.Window
 import android.widget.FrameLayout
@@ -170,6 +173,26 @@ class CustomExoPlayerView(
     // PrimeTube: state of an ongoing horizontal video switch gesture
     private var videoSwitchInProgress = false
     private var videoSwitchDistanceFraction = 0f
+
+    // PrimeTube: free-form subtitles - drag vertically, pinch to resize,
+    // double tap to reset. Offset/scale are persisted in the settings.
+    private var subtitleOffsetFraction = PlayerHelper.primeSubtitleOffset
+    private var subtitleTextScale = PlayerHelper.primeSubtitleScale
+    private var subtitleTouchActive = false
+    private var subtitleDragStartY = 0f
+    private var subtitleDragStartOffset = 0f
+    private var lastSubtitleTapTime = 0L
+    private val subtitleScaleDetector = ScaleGestureDetector(
+        context,
+        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                if (!detector.isInProgress) return false
+                subtitleTextScale = (subtitleTextScale * detector.scaleFactor).coerceIn(0.5f, 3f)
+                applySubtitleTextSize()
+                return true
+            }
+        }
+    )
 
     private fun toggleController(show: Boolean = !isControllerFullyVisible) {
         if (show) showController() else hideController()
@@ -1468,15 +1491,158 @@ class CustomExoPlayerView(
      * Load the captions style according to the users preferences
      */
     private fun applyCaptionsStyle() {
-        val captionStyle = PlayerHelper.getCaptionStyle(context)
+        val transparent = PlayerHelper.primeTransparentSubtitles
+        val captionStyle = if (transparent) {
+            // PrimeTube: YouTube-like clean captions - white text with a soft
+            // shadow, nothing drawn behind it (fully transparent background)
+            CaptionStyleCompat(
+                Color.WHITE,
+                Color.TRANSPARENT,
+                Color.TRANSPARENT,
+                CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                0xB3000000.toInt(),
+                null
+            )
+        } else {
+            PlayerHelper.getCaptionStyle(context)
+        }
         subtitleView?.apply {
             setApplyEmbeddedFontSizes(false)
-            setFixedTextSize(Cue.TEXT_SIZE_TYPE_ABSOLUTE, PlayerHelper.captionsTextSize)
-            if (PlayerHelper.useRichCaptionRendering) setViewType(SubtitleView.VIEW_TYPE_WEB)
-            if (!PlayerHelper.useSystemCaptionStyle) return
-            setApplyEmbeddedStyles(captionStyle == CaptionStyleCompat.DEFAULT)
+            setFixedTextSize(
+                Cue.TEXT_SIZE_TYPE_ABSOLUTE,
+                PlayerHelper.captionsTextSize * subtitleTextScale
+            )
+            if (PlayerHelper.useRichCaptionRendering && !transparent) {
+                setViewType(SubtitleView.VIEW_TYPE_WEB)
+            }
+            setApplyEmbeddedStyles(!transparent && captionStyle == CaptionStyleCompat.DEFAULT)
             setStyle(captionStyle)
+            // PrimeTube: subtitles sit at the very bottom by default
+            setBottomPaddingFraction(SUBTITLE_BOTTOM_FRACTION)
         }
+        applySubtitleTextSize()
+        applySubtitleTransform()
+    }
+
+    /** PrimeTube: re-apply the user subtitle offset after size changes. */
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        applySubtitleTransform()
+    }
+
+    private fun applySubtitleTransform() {
+        val height = height.takeIf { it > 0 } ?: return
+        val translation = subtitleOffsetFraction * height
+        subtitleView?.translationY = translation
+    }
+
+    private fun applySubtitleTextSize() {
+        subtitleView?.setFixedTextSize(
+            Cue.TEXT_SIZE_TYPE_ABSOLUTE,
+            PlayerHelper.captionsTextSize * subtitleTextScale
+        )
+    }
+
+    private fun persistSubtitle() {
+        PreferenceHelper.putString(
+            PreferenceKeys.PRIME_SUBTITLE_OFFSET,
+            subtitleOffsetFraction.toString()
+        )
+        PreferenceHelper.putString(
+            PreferenceKeys.PRIME_SUBTITLE_SCALE,
+            subtitleTextScale.toString()
+        )
+    }
+
+    /**
+     * PrimeTube: free-form subtitle gestures. A touch that starts on the
+     * visible caption area drags the subtitles vertically instead of
+     * triggering the normal player gestures - two fingers pinch-resize.
+     */
+    private fun handleSubtitleTouch(event: MotionEvent): Boolean {
+        val subtitleView = subtitleView ?: return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                if (subtitleView.childCount == 0 || subtitleView.visibility != View.VISIBLE) {
+                    return false
+                }
+                val rect = RectF()
+                computeSubtitleBounds(rect)
+                rect.inset(-48f, -36f)
+                if (!rect.contains(event.x, event.y)) return false
+
+                subtitleTouchActive = true
+                subtitleDragStartY = event.y
+                subtitleDragStartOffset = subtitleOffsetFraction
+
+                // PrimeTube: double tap on the subtitles resets position + size
+                val now = SystemClock.uptimeMillis()
+                if (now - lastSubtitleTapTime < 300) {
+                    subtitleOffsetFraction = 0f
+                    subtitleTextScale = 1f
+                    applySubtitleTextSize()
+                    applySubtitleTransform()
+                    persistSubtitle()
+                }
+                lastSubtitleTapTime = now
+                return true
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (subtitleTouchActive) {
+                    subtitleScaleDetector.onTouchEvent(event)
+                    return true
+                }
+                return false
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (!subtitleTouchActive) return false
+                subtitleScaleDetector.onTouchEvent(event)
+                if (event.pointerCount == 1 && !subtitleScaleDetector.isInProgress) {
+                    val dy = event.y - subtitleDragStartY
+                    val height = height.takeIf { it > 0 } ?: return true
+                    subtitleOffsetFraction =
+                        (subtitleDragStartOffset + dy / height).coerceIn(-0.65f, 0.06f)
+                    applySubtitleTransform()
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (!subtitleTouchActive) return false
+                subtitleTouchActive = false
+                subtitleScaleDetector.onTouchEvent(event)
+                persistSubtitle()
+                return true
+            }
+        }
+        return false
+    }
+
+    /** PrimeTube: bounds of the drawn caption text in this view's coordinates. */
+    private fun computeSubtitleBounds(out: RectF) {
+        val subtitleView = subtitleView ?: return out.set(0f, 0f, 0f, 0f)
+        val viewLocation = IntArray(2)
+        val playerLocation = IntArray(2)
+        subtitleView.getLocationOnScreen(viewLocation)
+        getLocationOnScreen(playerLocation)
+        val left = (viewLocation[0] - playerLocation[0]).toFloat()
+        val top = (viewLocation[1] - playerLocation[1]).toFloat()
+
+        var l = Float.MAX_VALUE
+        var t = Float.MAX_VALUE
+        var r = -Float.MAX_VALUE
+        var b = -Float.MAX_VALUE
+        for (i in 0 until subtitleView.childCount) {
+            val child = subtitleView.getChildAt(i)
+            if (child.visibility != View.VISIBLE) continue
+            l = minOf(l, left + child.left)
+            t = minOf(t, top + child.top)
+            r = maxOf(r, left + child.right)
+            b = maxOf(b, top + child.bottom)
+        }
+        if (r > l && b > t) out.set(l, t, r, b) else out.set(left, top, left + subtitleView.width, top + subtitleView.height)
     }
 
     /**
@@ -1623,7 +1789,7 @@ class CustomExoPlayerView(
         if (!PlayerHelper.pinchGestureEnabled) return
         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
 
-        subtitleView?.setBottomPaddingFraction(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION)
+        subtitleView?.setBottomPaddingFraction(SUBTITLE_BOTTOM_FRACTION)
     }
 
     override fun onLongPress() {
@@ -1659,7 +1825,7 @@ class CustomExoPlayerView(
             }
             subtitleView?.setFixedTextSize(
                 Cue.TEXT_SIZE_TYPE_ABSOLUTE,
-                PlayerHelper.captionsTextSize * 1.5f
+                PlayerHelper.captionsTextSize * 1.5f * subtitleTextScale
             )
             if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_ZOOM) {
                 subtitleView?.setBottomPaddingFraction(SUBTITLE_BOTTOM_PADDING_FRACTION)
@@ -1670,9 +1836,9 @@ class CustomExoPlayerView(
             }
             subtitleView?.setFixedTextSize(
                 Cue.TEXT_SIZE_TYPE_ABSOLUTE,
-                PlayerHelper.captionsTextSize
+                PlayerHelper.captionsTextSize * subtitleTextScale
             )
-            subtitleView?.setBottomPaddingFraction(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION)
+            subtitleView?.setBottomPaddingFraction(SUBTITLE_BOTTOM_FRACTION)
         }
 
         updateMarginsByFullscreenMode()
@@ -1693,6 +1859,9 @@ class CustomExoPlayerView(
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         if (event == null) return false
         if (!useController) return false
+
+        // PrimeTube: a touch on the visible captions moves/resizes them
+        if (handleSubtitleTouch(event)) return true
 
         return playerGestureController.onTouchEvent(event)
     }
@@ -1788,6 +1957,9 @@ class CustomExoPlayerView(
         private const val AB_REPEAT_TOKEN = "primeAbRepeat"
 
         private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.158f
+
+        /** PrimeTube: default subtitle position - hugging the very bottom. */
+        private const val SUBTITLE_BOTTOM_FRACTION = 0.012f
         private const val ANIMATION_DURATION = 100L
         private const val AUTO_HIDE_CONTROLLER_DELAY = 2000L
 

@@ -184,4 +184,16 @@
 
     </PreferenceCategory>
 
+    <!-- PrimeTube: free-form subtitles + AI Bangla translation -->
+    <PreferenceCategory app:title="@string/prime_settings_subtitles">
+
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:icon="@drawable/ic_caption"
+            android:summary="@string/prime_subtitle_transparent_summary"
+            app:key="prime_subtitle_transparent"
+            app:title="@string/prime_subtitle_transparent" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

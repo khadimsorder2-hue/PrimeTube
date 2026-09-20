@@ -330,6 +330,34 @@ object PlayerHelper {
             "18"
         ).toFloat()
 
+    /** PrimeTube: YouTube-like clean subtitles without a background box. */
+    val primeTransparentSubtitles: Boolean
+        get() = PreferenceHelper.getBoolean(
+            PreferenceKeys.PRIME_SUBTITLE_TRANSPARENT,
+            true
+        )
+
+    /** PrimeTube: vertical subtitle position as a fraction of the player height. */
+    val primeSubtitleOffset: Float
+        get() = PreferenceHelper.getString(
+            PreferenceKeys.PRIME_SUBTITLE_OFFSET,
+            "0"
+        ).toFloatOrNull() ?: 0f
+
+    /** PrimeTube: user subtitle size factor (pinch to resize). */
+    val primeSubtitleScale: Float
+        get() = PreferenceHelper.getString(
+            PreferenceKeys.PRIME_SUBTITLE_SCALE,
+            "1"
+        ).toFloatOrNull() ?: 1f
+
+    /** PrimeTube: AI (Gemini) Bangla subtitle translation toggle. */
+    val primeAiSubtitlesEnabled: Boolean
+        get() = PreferenceHelper.getBoolean(
+            PreferenceKeys.PRIME_AI_SUBTITLES,
+            false
+        )
+
     val doubleTapToSeek: Boolean
         get() = PreferenceHelper.getBoolean(
             PreferenceKeys.DOUBLE_TAP_TO_SEEK,

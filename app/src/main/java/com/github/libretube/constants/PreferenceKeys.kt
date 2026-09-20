@@ -81,6 +81,16 @@ object PreferenceKeys {
     const val SHOW_TIME_LEFT = "show_time_left"
     const val REPEAT_MODE = "repeat_mode"
 
+    // PrimeTube: free-form subtitles (transparent bg, drag, pinch resize)
+    const val PRIME_SUBTITLE_TRANSPARENT = "prime_subtitle_transparent"
+    const val PRIME_SUBTITLE_OFFSET = "prime_subtitle_offset"
+    const val PRIME_SUBTITLE_SCALE = "prime_subtitle_scale"
+
+    // PrimeTube: AI (Gemini) Bangla subtitles
+    const val PRIME_AI_SUBTITLES = "prime_ai_subtitles"
+    const val PRIME_AI_API_KEY = "prime_ai_api_key"
+    const val PRIME_AI_MODEL = "prime_ai_model"
+
     // SponsorBlock
     const val SB_USER_ID = "sb_user_id"
     const val CONTRIBUTE_TO_SB = "sb_contribute_key"
