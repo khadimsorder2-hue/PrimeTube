@@ -21,7 +21,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.commit
 import androidx.fragment.app.replace
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
@@ -43,12 +45,15 @@ import com.github.libretube.extensions.setOnDismissListener
 import com.github.libretube.helpers.DownloadHelper
 import com.github.libretube.helpers.NavigationHelper
 import com.github.libretube.helpers.PreferenceHelper
+import com.github.libretube.helpers.PrimeDownloadTracker
 import com.github.libretube.obj.DownloadStatus
 import com.github.libretube.parcelable.PlayerData
 import com.github.libretube.receivers.DownloadReceiver
 import com.github.libretube.services.DownloadService
+import com.github.libretube.services.StorageDownloadService
 import com.github.libretube.ui.adapters.DownloadPlaylistAdapter
 import com.github.libretube.ui.adapters.DownloadsAdapter
+import com.github.libretube.ui.adapters.PrimeActiveDownloadsAdapter
 import com.github.libretube.ui.base.DynamicLayoutManagerFragment
 import com.github.libretube.ui.extensions.setOnBackPressed
 import com.github.libretube.ui.models.CommonPlayerViewModel
@@ -206,6 +211,28 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
                 }
             ) { !toggleDownload(it) }
         binding.downloadsRecView.adapter = adapter
+
+        // PrimeTube: live download queue at the top of the Downloads page -
+        // mirrors BOTH the internal downloader and the "save to storage"
+        // downloader, with progress bar, size, speed and cancel
+        val activeAdapter = PrimeActiveDownloadsAdapter { key ->
+            if (key.startsWith("storage:")) {
+                val videoId = key.removePrefix("storage:")
+                StorageDownloadService.cancel(requireContext(), videoId)
+                PrimeDownloadTracker.remove(key)
+            }
+        }
+        binding.primeActiveDownloads.adapter = activeAdapter
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                PrimeDownloadTracker.downloads.collect { list ->
+                    activeAdapter.submitList(list)
+                    val visible = list.isNotEmpty()
+                    binding.primeActiveDownloads.isVisible = visible
+                    binding.primeActiveDownloadsTitle.isVisible = visible
+                }
+            }
+        }
 
         val filterOptions = DownloadSortingOrder.entries.map { getString(it.stringId) }
         binding.sortType.text = filterOptions[selectedSortType]

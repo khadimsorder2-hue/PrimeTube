@@ -454,7 +454,11 @@ class CustomExoPlayerView(
     }
 
     init {
-        brightnessHelper = BrightnessHelper(activity)
+        // PrimeTube: brightness must follow the window the player is currently
+        // shown in (the fullscreen dialog in fullscreen, the activity window
+        // otherwise) - otherwise the brightness gesture changes an INVISIBLE
+        // window and looks completely dead
+        brightnessHelper = BrightnessHelper(activity) { currentWindow ?: activity.window }
         playerGestureController = PlayerGestureController(activity, this)
 
         // PrimeTube: the AI subtitle overlay lives inside the content frame so
@@ -2309,6 +2313,24 @@ class CustomExoPlayerView(
     }
 
     fun getWindow(): Window = currentWindow ?: activity.window
+
+    /**
+     * PrimeTube: re-apply the saved gesture brightness to whichever window the
+     * player currently lives in. Called right after the fullscreen dialog
+     * window swap, because the fullscreen-change callback fires BEFORE the
+     * player view is actually moved into the new window.
+     */
+    fun primeSyncBrightnessToCurrentWindow() {
+        if (PlayerHelper.swipeGestureEnabled) brightnessHelper.restoreSavedBrightness()
+    }
+
+    /**
+     * PrimeTube: give the system brightness back to the (new) activity window
+     * after the player left the fullscreen dialog window.
+     */
+    fun primeResetBrightnessToSystemWindow() {
+        if (PlayerHelper.swipeGestureEnabled) brightnessHelper.resetToSystemBrightness()
+    }
 
     companion object {
         private const val HIDE_CONTROLLER_TOKEN = "hideController"

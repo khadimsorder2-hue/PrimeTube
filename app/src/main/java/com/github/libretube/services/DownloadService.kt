@@ -39,6 +39,10 @@ import com.github.libretube.enums.NotificationId
 import com.github.libretube.extensions.TAG
 import com.github.libretube.extensions.formatAsFileSize
 import com.github.libretube.extensions.parcelableExtra
+import com.github.libretube.helpers.PrimeDownloadTracker
+import com.github.libretube.helpers.PrimeDownloadTracker.PrimeActiveDownload
+import com.github.libretube.helpers.PrimeDownloadTracker.PrimeDownloadState
+import com.github.libretube.helpers.PrimeSpeedCalculator
 import com.github.libretube.extensions.toLocalDate
 import com.github.libretube.extensions.toastFromMainDispatcher
 import com.github.libretube.extensions.toastFromMainThread
@@ -92,6 +96,9 @@ class DownloadService : LifecycleService() {
 
     private lateinit var notificationManager: NotificationManager
     private lateinit var summaryNotificationBuilder: Builder
+
+    // PrimeTube: per-item speed estimator for the notifications + live queue
+    private val speedCalculators = java.util.concurrent.ConcurrentHashMap<Int, PrimeSpeedCalculator>()
 
     /**
      * Maps all currently running downloads to `true`, and all paused or stopped downloads to `false`.
@@ -263,13 +270,62 @@ class DownloadService : LifecycleService() {
      */
     @SuppressLint("UnsafeOptInUsageError")
     private suspend fun selectFormatAndDownloadFile(item: DownloadItem) {
-        val streams = loadStreamsInfo(item.videoId) ?: return
+        // PrimeTube: show the item in the in-app download queue immediately
+        PrimeDownloadTracker.upsert(
+            PrimeActiveDownload(
+                key = trackerKey(item.id),
+                title = item.fileName,
+                state = PrimeDownloadState.DOWNLOADING
+            )
+        )
+        speedCalculators[item.id] = PrimeSpeedCalculator()
+
+        val streams = loadStreamsInfo(item.videoId)
+        if (streams == null) {
+            // PrimeTube: the queue row must not hang forever when the video
+            // info cannot even be fetched
+            markTrackerFinished(item, false, "stream error")
+            speedCalculators.remove(item.id)
+            return
+        }
         if (item.type == FileType.SUBTITLE) {
             // subtitles are always plain files and don't use SABR
-            val subtitle = streams.subtitles.firstOrNull { it.code == item.language } ?: return
+            val subtitle = streams.subtitles.firstOrNull { it.code == item.language }
+            if (subtitle == null) {
+                markTrackerFinished(item, false, "subtitle missing")
+                speedCalculators.remove(item.id)
+                return
+            }
             downloadFile(item, RawByteStreamDownloadProvider(subtitle.url!!.toHttpUrl()))
         } else {
-            val selectedStream = selectMatchingStream(streams, item) ?: return
+            val selectedStream = selectMatchingStream(streams, item)
+            if (selectedStream == null) {
+                // PrimeTube: exact quality match failed - fall back to the
+                // closest lower/equal quality instead of silently dying
+                val fallback = when (item.type) {
+                    FileType.AUDIO -> streams.audioStreams
+                        .maxByOrNull { it.bitrate ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0 }
+                    FileType.VIDEO -> streams.videoStreams
+                        .filter { !it.url.isNullOrEmpty() || (it.itag != null && it.lastModified != null) }
+                        .filter {
+                            (it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0) <=
+                                (item.quality?.filter(Char::isDigit)?.toIntOrNull() ?: Int.MAX_VALUE)
+                        }
+                        .maxByOrNull { it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0 }
+                    else -> null
+                }
+                if (fallback == null) {
+                    markTrackerFinished(item, false, "quality not available")
+                    speedCalculators.remove(item.id)
+                    return
+                }
+                if (fallback.url?.startsWith("http") == true) {
+                    downloadFile(item, RawByteStreamDownloadProvider(fallback.url!!.toHttpUrl()))
+                    return
+                }
+                downloadFile(item, SabrDownloadProvider(item, streams, fallback))
+                return
+            }
             if (selectedStream.url?.startsWith("http") == true) {
                 downloadFile(item, RawByteStreamDownloadProvider(selectedStream.url!!.toHttpUrl()))
             } else {
@@ -302,6 +358,8 @@ class DownloadService : LifecycleService() {
                         setPauseNotification(notificationBuilder, item, true)
                         _downloadFlow.emit(item.id to DownloadStatus.Completed)
                         downloadQueue[item.id] = false
+                        markTrackerFinished(item, true, null)
+                        speedCalculators.remove(item.id)
                         break
                     }
                     DownloadProgressResult.Failed -> {
@@ -334,6 +392,8 @@ class DownloadService : LifecycleService() {
                 toastFromMainThread("${getString(R.string.download)}: ${e.message}")
                 Log.e(this@DownloadService::class.java.name, e.stackTraceToString())
                 _downloadFlow.emit(item.id to DownloadStatus.Error(e.message.toString(), e))
+                markTrackerFinished(item, false, e.message.toString())
+                speedCalculators.remove(item.id)
                 break
             }
         }
@@ -347,7 +407,20 @@ class DownloadService : LifecycleService() {
         startNextEnqueueDownload()
 
         // explicitly send a pause event if the user paused the download, although it's not yet finished
-        if (!item.isFinished) pause(item.id)
+        if (!item.isFinished) {
+            // PrimeTube: the in-app queue row switches to the paused state
+            PrimeDownloadTracker.upsert(
+                PrimeActiveDownload(
+                    key = trackerKey(item.id),
+                    title = item.fileName,
+                    state = PrimeDownloadState.PAUSED,
+                    readBytes = item.path.fileSize(),
+                    totalBytes = item.downloadSize
+                )
+            )
+            speedCalculators.remove(item.id)
+            pause(item.id)
+        }
 
         // if no new download was enqueued (i.e. there's no paused/stopped download left),
         // look if any downloads are still running, and if not, stop the service
@@ -371,10 +444,31 @@ class DownloadService : LifecycleService() {
         item: DownloadItem,
         totalRead: Int
     ) {
+        // PrimeTube: live speed + percentage in the notification
+        val speed = speedCalculators[item.id]?.onBytes(totalRead.toLong()) ?: 0L
+        val percent = if (item.downloadSize > 0) {
+            (totalRead * 100 / item.downloadSize).toInt().coerceIn(0, 100)
+        } else {
+            -1
+        }
+
         notificationBuilder
             .setContentText(
-                totalRead.formatAsFileSize() + " / " +
-                        item.downloadSize.formatAsFileSize()
+                buildString {
+                    append(totalRead.toLong().formatAsFileSize())
+                    append(" / ")
+                    append(item.downloadSize.formatAsFileSize())
+                    if (speed > 0) {
+                        append(" • ")
+                        append(speed.formatAsFileSize())
+                        append("/s")
+                    }
+                    if (percent >= 0) {
+                        append(" • ")
+                        append(percent)
+                        append('%')
+                    }
+                }
             )
             .setProgress(
                 item.downloadSize.toInt(),
@@ -385,6 +479,38 @@ class DownloadService : LifecycleService() {
             item.getNotificationId(),
             notificationBuilder.build()
         )
+
+        // PrimeTube: mirror the progress into the in-app download queue
+        PrimeDownloadTracker.updateProgress(
+            trackerKey(item.id),
+            totalRead.toLong(),
+            item.downloadSize,
+            speed
+        )
+    }
+
+    /** PrimeTube: tracker key for an offline download item. */
+    private fun trackerKey(itemId: Int): String = "internal:$itemId"
+
+    /**
+     * PrimeTube: move a queue row into a terminal state and clean it up after
+     * a moment. For failures the reason is shown briefly.
+     */
+    private fun markTrackerFinished(item: DownloadItem, success: Boolean, message: String?) {
+        val key = trackerKey(item.id)
+        PrimeDownloadTracker.upsert(
+            PrimeActiveDownload(
+                key = key,
+                title = item.fileName,
+                state = if (success) PrimeDownloadState.COMPLETED else PrimeDownloadState.FAILED,
+                message = message,
+                finishedAtMs = System.currentTimeMillis()
+            )
+        )
+        lifecycleScope.launch {
+            delay(if (success) 3_500L else 6_000L)
+            PrimeDownloadTracker.remove(key)
+        }
     }
 
     /**
@@ -491,6 +617,10 @@ class DownloadService : LifecycleService() {
     private fun stop(id: Int) = lifecycleScope.launch(coroutineContext) {
         downloadQueue[id] = false
         _downloadFlow.emit(id to DownloadStatus.Stopped)
+
+        // PrimeTube: a stopped download disappears from the in-app queue too
+        speedCalculators.remove(id)
+        PrimeDownloadTracker.remove(trackerKey(id))
 
         val item = Database.downloadDao().findDownloadItemById(id) ?: return@launch
         notificationManager.cancel(item.getNotificationId())

@@ -207,14 +207,15 @@
     </LinearLayout>
 
     <!-- PrimeTube: the ONLY button in PiP - a small headphone that leaves
-         the PiP window and keeps the audio playing in the background -->
+         the PiP window and keeps the audio playing in the background.
+         It sits FLUSH at the very top-right corner of the PiP window. -->
     <ImageView
         android:id="@+id/primePipAudioBtn"
         android:layout_width="36dp"
         android:layout_height="36dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginTop="0dp"
+        android:layout_marginEnd="0dp"
         android:background="@drawable/prime_chip_bg"
         android:contentDescription="@string/prime_pip_audio_bg"
         android:padding="8dp"

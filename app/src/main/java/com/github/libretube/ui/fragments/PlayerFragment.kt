@@ -1390,9 +1390,14 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             )
             fullscreenDialog.show()
             playerView.currentWindow = fullscreenDialog.window
+            // PrimeTube: the brightness gesture must now drive the dialog
+            // window - re-apply the saved brightness to the NEW window
+            playerView.primeSyncBrightnessToCurrentWindow()
         } else {
             binding.playerMotionLayout.addView(playerView)
             playerView.currentWindow = null
+            // PrimeTube: back in the activity window - restore system brightness
+            playerView.primeResetBrightnessToSystemWindow()
             fullscreenDialog.dismiss()
         }
 

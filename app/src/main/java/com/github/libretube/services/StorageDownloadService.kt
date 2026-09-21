@@ -25,12 +25,20 @@ import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.db.obj.DownloadItem
 import com.github.libretube.db.obj.SavedDownload
 import com.github.libretube.enums.FileType
+import com.github.libretube.extensions.formatAsFileSize
 import com.github.libretube.helpers.PreferenceHelper
+import com.github.libretube.helpers.PrimeDownloadTracker
+import com.github.libretube.helpers.PrimeDownloadTracker.PrimeActiveDownload
+import com.github.libretube.helpers.PrimeDownloadTracker.PrimeDownloadState
+import com.github.libretube.helpers.PrimeSpeedCalculator
 import com.github.libretube.repo.DownloadProgressResult
 import com.github.libretube.repo.DownloadProvider
 import com.github.libretube.repo.RawByteStreamDownloadProvider
 import com.github.libretube.repo.SabrDownloadProvider
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,8 +52,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okio.buffer
 import okio.sink
 import java.nio.file.StandardOpenOption
-import java.util.Locale
-import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * PrimeTube: "save to storage" downloader - lands media DIRECTLY in the phone
@@ -60,9 +66,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * 1. a plain HTTP download when the stream still exposes a direct URL,
  * 2. the SABR protocol client (streaming segments from YouTube's servers)
  *    for every format without a usable URL,
- * 3. if no combined (video+audio) stream can be delivered at all, the best
- *    video-only stream + the best audio stream are saved as separate files
- *    so the user ALWAYS ends up with the media in the storage.
+ * 3. if no combined (video+audio) stream can be delivered at all, a
+ *    video-only stream + an audio stream are saved as separate files so the
+ *    user ALWAYS ends up with the media in the storage.
+ *
+ * PrimeTube: the quality picked in the download dialog is now PASSED THROUGH
+ * and respected - only when the dialog was not used (quick "save" from the
+ * video menu) the best available stream is saved.
+ *
+ * The live progress (file name, size, speed, percentage) is mirrored to
+ * [PrimeDownloadTracker] so the Downloads page can show the queue in-app.
  */
 @OptIn(UnstableApi::class)
 class StorageDownloadService : android.app.Service() {
@@ -71,6 +84,8 @@ class StorageDownloadService : android.app.Service() {
     private val workerMutex = Mutex()
     private var worker: Job? = null
     private lateinit var notificationManager: NotificationManager
+    private val speedCalculators = ConcurrentHashMap<String, PrimeSpeedCalculator>()
+    private val cancelFlags = ConcurrentHashMap<String, AtomicBoolean>()
 
     override fun onCreate() {
         super.onCreate()
@@ -79,9 +94,42 @@ class StorageDownloadService : android.app.Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val videoId = intent?.getStringExtra(EXTRA_VIDEO_ID) ?: return START_NOT_STICKY
-        val audioOnly = intent.getBooleanExtra(EXTRA_AUDIO_ONLY, false)
 
-        QUEUE.add(Task(videoId, audioOnly))
+        // PrimeTube: cancel request from the in-app download queue - drop the
+        // task from the queue and flag any running copy so it stops at the
+        // next chunk/file boundary
+        if (intent.getBooleanExtra(EXTRA_CANCEL, false)) {
+            QUEUE.removeAll { it.videoId == videoId }
+            val running = cancelFlags.putIfAbsent(videoId, AtomicBoolean(true))
+            running?.set(true)
+            if (worker?.isActive != true) {
+                finishCancelled(videoId)
+                stopSelf()
+            }
+            return START_NOT_STICKY
+        }
+
+        val task = Task(
+            videoId = videoId,
+            audioOnly = intent.getBooleanExtra(EXTRA_AUDIO_ONLY, false),
+            videoQuality = intent.getStringExtra(EXTRA_VIDEO_QUALITY),
+            videoFormat = intent.getStringExtra(EXTRA_VIDEO_FORMAT),
+            audioQuality = intent.getStringExtra(EXTRA_AUDIO_QUALITY),
+            audioFormat = intent.getStringExtra(EXTRA_AUDIO_FORMAT)
+        )
+
+        QUEUE.add(task)
+        // PrimeTube: a fresh task always resets any leftover cancel flag of a
+        // previous download of the same video
+        cancelFlags[videoId] = AtomicBoolean(false)
+        PrimeDownloadTracker.upsert(
+            PrimeActiveDownload(
+                key = trackerKey(videoId),
+                title = task.videoId,
+                state = PrimeDownloadState.QUEUED,
+                canCancel = true
+            )
+        )
         if (worker?.isActive != true) {
             worker = scope.launch { processQueue() }
         }
@@ -97,7 +145,7 @@ class StorageDownloadService : android.app.Service() {
         workerMutex.withLock {
             while (true) {
                 val task = QUEUE.poll() ?: break
-                runCatching { saveVideo(task.videoId, task.audioOnly) }
+                runCatching { saveVideo(task) }
                     .onFailure {
                         it.printStackTrace()
                         notifyFinished(task.videoId, false, it.message ?: "error")
@@ -107,12 +155,20 @@ class StorageDownloadService : android.app.Service() {
         }
     }
 
-    private suspend fun saveVideo(videoId: String, audioOnly: Boolean = false) {
+    private suspend fun saveVideo(task: Task) {
+        val videoId = task.videoId
         // promote to foreground immediately (5s rule for startForegroundService)
+        // - this MUST happen even for a cancelled task, otherwise the system
+        // kills the app for not calling startForeground in time
         startForegroundCompat(
             videoId.notificationId(),
-            buildNotification(getString(R.string.download_preparing), 0, 0)
+            buildNotification(null, getString(R.string.download_preparing), -1, 0)
         )
+        // PrimeTube: cancelled while queued -> skip everything silently
+        if (isCancelled(videoId)) {
+            finishCancelled(videoId)
+            return
+        }
 
         val streams = runCatching {
             MediaServiceRepository.instance.getStreams(videoId)
@@ -122,11 +178,24 @@ class StorageDownloadService : android.app.Service() {
             return
         }
 
-        if (audioOnly) {
-            // PrimeTube: save the best audio stream (m4a/opus/mp3)
-            val audio = streams.audioStreams
-                .filter { isUsableStream(it) }
-                .maxByOrNull { streamRank(it, audio = true) }
+        if (isCancelled(videoId)) return finishCancelled(videoId)
+
+        PrimeDownloadTracker.upsert(
+            PrimeActiveDownload(
+                key = trackerKey(videoId),
+                title = streams.title.ifBlank { videoId },
+                state = PrimeDownloadState.DOWNLOADING,
+                canCancel = true
+            )
+        )
+
+        if (task.audioOnly) {
+            // PrimeTube: save the SELECTED audio stream, or the best one when
+            // the download was started without the dialog
+            val audio = resolveAudio(streams, task.audioQuality, task.audioFormat)
+                ?: streams.audioStreams
+                    .filter { isUsableStream(it) }
+                    .maxByOrNull { streamRank(it, audio = true) }
             if (audio == null) {
                 notifyFinished(videoId, false, getString(R.string.no_audio))
                 return
@@ -135,8 +204,69 @@ class StorageDownloadService : android.app.Service() {
             return
         }
 
-        // PrimeTube: prefer the best combined (video+audio) stream - one
-        // playable file like a normal download
+        // PrimeTube: the quality the user selected in the download dialog.
+        // A combined (video+audio) stream at that quality is preferred - one
+        // playable file like a normal download.
+        val selected = resolveVideo(streams, task.videoQuality, task.videoFormat)
+
+        if (selected != null) {
+            if (isCancelled(videoId)) return finishCancelled(videoId)
+
+            if (selected.videoOnly != true &&
+                saveStream(videoId, streams, selected, isAudio = false, rawTitle = streams.title, suffix = "")
+            ) {
+                return
+            }
+
+            // combined stream not available/deliverable at the selected
+            // quality -> save the SAME QUALITY video-only stream + audio
+            val wanted = selected.height
+                ?: selected.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0
+            val video = if (selected.videoOnly == true) {
+                selected
+            } else {
+                streams.videoStreams
+                    .filter { it.videoOnly == true && isUsableStream(it) }
+                    .filter {
+                        (it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0) == wanted
+                    }
+                    .minByOrNull { streamRank(it, audio = false) }
+                    // absolutely no stream at the selected height deliverable?
+                    // stay as close to the user's choice as possible
+                    ?: streams.videoStreams
+                        .filter { it.videoOnly == true && isUsableStream(it) }
+                        .filter { (it.height ?: 0) <= wanted }
+                        .maxByOrNull { it.height ?: 0 }
+            }
+
+            var savedAny = false
+            if (video != null) {
+                savedAny = saveStream(
+                    videoId, streams, video, isAudio = false,
+                    rawTitle = streams.title,
+                    suffix = " (${video.quality.orEmpty()})"
+                )
+            }
+            if (isCancelled(videoId)) return finishCancelled(videoId)
+            val audio = resolveAudio(streams, task.audioQuality, task.audioFormat)
+                ?: streams.audioStreams
+                    .filter { isUsableStream(it) }
+                    .maxByOrNull { streamRank(it, audio = true) }
+            if (audio != null) {
+                savedAny = saveStream(
+                    videoId, streams, audio, isAudio = true,
+                    rawTitle = streams.title, suffix = " (audio)"
+                ) || savedAny
+            }
+            if (!savedAny && video == null) {
+                notifyFinished(videoId, false, getString(R.string.no_muxed_stream))
+            }
+            return
+        }
+
+        // PrimeTube: no explicit selection (quick save from the video menu) -
+        // keep the historic behavior: the best combined stream, otherwise the
+        // best video-only stream + the best audio stream
         val muxed = streams.videoStreams
             .filter { it.videoOnly != true && isUsableStream(it) }
             .maxByOrNull { streamRank(it, audio = false) }
@@ -145,8 +275,6 @@ class StorageDownloadService : android.app.Service() {
             return
         }
 
-        // PrimeTube SABR-era fallback: no combined stream deliverable - save
-        // the best video-only stream and the best audio stream as two files
         val video = streams.videoStreams
             .filter { it.videoOnly == true && isUsableStream(it) }
             .maxByOrNull { streamRank(it, audio = false) }
@@ -158,12 +286,49 @@ class StorageDownloadService : android.app.Service() {
         if (video != null) {
             savedAny = saveStream(videoId, streams, video, isAudio = false, rawTitle = streams.title, suffix = "")
         }
+        if (isCancelled(videoId)) return finishCancelled(videoId)
         if (audio != null) {
             savedAny = saveStream(videoId, streams, audio, isAudio = true, rawTitle = streams.title, suffix = " (audio)") || savedAny
         }
         if (!savedAny && video == null && audio == null) {
             notifyFinished(videoId, false, getString(R.string.no_muxed_stream))
         }
+    }
+
+    /**
+     * PrimeTube: find the stream that matches the quality the user picked in
+     * the download dialog. Falls back progressively (quality+format, quality,
+     * closest lower height) so the download never silently degrades to the
+     * maximum quality again.
+     */
+    private fun resolveVideo(streams: Streams, quality: String?, format: String?): PipedStream? {
+        if (quality.isNullOrBlank()) return null
+        val usable = streams.videoStreams.filter { isUsableStream(it) }
+
+        usable.firstOrNull {
+            it.quality == quality && (format.isNullOrBlank() || it.format == format) && it.videoOnly != true
+        }?.let { return it }
+        usable.firstOrNull {
+            it.quality == quality && (format.isNullOrBlank() || it.format == format)
+        }?.let { return it }
+        usable.firstOrNull { it.quality == quality && it.videoOnly != true }?.let { return it }
+        usable.firstOrNull { it.quality == quality }?.let { return it }
+
+        val wanted = quality.filter(Char::isDigit).toIntOrNull() ?: return null
+        return usable
+            .map { it to (it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0) }
+            .filter { it.second > 0 && it.second <= wanted }
+            .minByOrNull { wanted - it.second }
+            ?.first
+    }
+
+    private fun resolveAudio(streams: Streams, quality: String?, format: String?): PipedStream? {
+        if (quality.isNullOrBlank()) return null
+        val usable = streams.audioStreams.filter { isUsableStream(it) }
+        usable.firstOrNull {
+            it.quality == quality && (format.isNullOrBlank() || it.format == format)
+        }?.let { return it }
+        return usable.firstOrNull { it.quality == quality }
     }
 
     /**
@@ -190,17 +355,39 @@ class StorageDownloadService : android.app.Service() {
         }
         val fileName = sanitizeFileName("$rawName$suffix.$extension")
 
-        val temp = downloadToTempFile(videoId, streams, stream) ?: return false
+        speedCalculators[videoId] = PrimeSpeedCalculator()
+        PrimeDownloadTracker.upsert(
+            PrimeActiveDownload(
+                key = trackerKey(videoId),
+                title = fileName,
+                state = PrimeDownloadState.DOWNLOADING,
+                canCancel = true
+            )
+        )
+        updateProgress(videoId, 0L, stream.contentLength, fileName)
+
+        val temp = downloadToTempFile(videoId, streams, stream, fileName) ?: run {
+            speedCalculators.remove(videoId)
+            return false
+        }
+        if (isCancelled(videoId)) {
+            temp.delete()
+            speedCalculators.remove(videoId)
+            finishCancelled(videoId)
+            return true // task aborted on purpose - no error reporting
+        }
 
         val published = runCatching {
             publishTempFile(temp, fileName, mimeType, videoId)
         }.getOrElse {
             it.printStackTrace()
             temp.delete()
+            speedCalculators.remove(videoId)
             notifyFinished(videoId, false, it.message ?: "error")
             return false
         }
         temp.delete()
+        speedCalculators.remove(videoId)
 
         val (savedUri, sizeBytes) = published
         DatabaseHolder.Database.savedDownloadDao().insert(
@@ -246,7 +433,8 @@ class StorageDownloadService : android.app.Service() {
     private suspend fun downloadToTempFile(
         videoId: String,
         streams: Streams,
-        stream: PipedStream
+        stream: PipedStream,
+        fileName: String
     ): File? {
         val isAudio = stream.mimeType.orEmpty().startsWith("audio/")
         val temp = File.createTempFile("prime_dl_", ".bin", cacheDir)
@@ -256,8 +444,10 @@ class StorageDownloadService : android.app.Service() {
         if (!url.isNullOrBlank() && url.startsWith("http")) {
             val item = tempDownloadItem(videoId, isAudio, stream, temp)
             val provider = RawByteStreamDownloadProvider(url.toHttpUrl())
-            if (runDownloadProvider(provider, item, videoId)) return temp
+            if (runDownloadProvider(provider, item, videoId, fileName)) return temp
         }
+
+        if (isCancelled(videoId)) return null
 
         // attempt 2: SABR protocol client - YouTube's new streaming protocol
         if (stream.itag != null && stream.lastModified != null) {
@@ -271,7 +461,7 @@ class StorageDownloadService : android.app.Service() {
                 temp.delete()
                 return null
             }
-            if (runDownloadProvider(provider, item, videoId)) return temp
+            if (runDownloadProvider(provider, item, videoId, fileName)) return temp
         }
 
         temp.delete()
@@ -302,13 +492,15 @@ class StorageDownloadService : android.app.Service() {
     private suspend fun runDownloadProvider(
         provider: DownloadProvider,
         item: DownloadItem,
-        videoId: String
+        videoId: String,
+        fileName: String
     ): Boolean {
         var retries = 0
         var totalRead = 0L
         val sink = item.path.sink(StandardOpenOption.APPEND).buffer()
         try {
             while (retries < MAX_CHUNK_RETRIES) {
+                if (isCancelled(videoId)) return false
                 try {
                     when (val result = provider.downloadNextChunk(item, sink)) {
                         DownloadProgressResult.DownloadComplete -> {
@@ -326,7 +518,7 @@ class StorageDownloadService : android.app.Service() {
                             retries = 0
                             totalRead += result.bytes
                             sink.flush()
-                            updateProgress(videoId, totalRead, item.downloadSize)
+                            updateProgress(videoId, totalRead, item.downloadSize, fileName)
                         }
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -370,6 +562,7 @@ class StorageDownloadService : android.app.Service() {
                     var written = 0L
                     var lastUpdate = 0L
                     while (true) {
+                        if (isCancelled(videoId)) error("cancelled")
                         val read = input.read(buffer)
                         if (read == -1) break
                         out.write(buffer, 0, read)
@@ -377,7 +570,7 @@ class StorageDownloadService : android.app.Service() {
                         val now = System.currentTimeMillis()
                         if (now - lastUpdate > 500) {
                             lastUpdate = now
-                            updateProgress(videoId, written, total)
+                            updateProgress(videoId, written, total, fileName)
                         }
                     }
                     out.flush()
@@ -478,20 +671,40 @@ class StorageDownloadService : android.app.Service() {
         }.getOrNull()
     }
 
-    private fun updateProgress(videoId: String, written: Long, total: Long) {
-        val percent = if (total > 0) (written * 100 / total).toInt().coerceIn(0, 100) else 0
-        val label = if (total > 0) {
-            getString(R.string.download_in_progress, "$percent%")
-        } else {
-            getString(R.string.download_in_progress, "${written / (1024 * 1024)} MB")
+    /**
+     * PrimeTube: progress notification with EVERYTHING the user asked for -
+     * the file name as the title, then read/total size, live speed and the
+     * percentage, plus a determinate progress bar.
+     */
+    private fun updateProgress(videoId: String, written: Long, total: Long, fileName: String) {
+        val speed = speedCalculators[videoId]?.onBytes(written) ?: 0L
+        val percent = if (total > 0) (written * 100 / total).toInt().coerceIn(0, 100) else -1
+
+        val text = buildString {
+            append(written.formatAsFileSize())
+            if (total > 0) {
+                append(" / ").append(total.formatAsFileSize())
+            }
+            if (speed > 0) {
+                append(" • ").append(speed.formatAsFileSize()).append("/s")
+            }
+            if (percent >= 0) {
+                append(" • ").append(percent).append('%')
+            }
         }
-        notificationManager.notify(
-            videoId.notificationId(),
-            buildNotification(label, percent, total)
-        )
+
+        runCatching {
+            notificationManager.notify(
+                videoId.notificationId(),
+                buildNotification(fileName, text, percent, total)
+            )
+        }
+
+        PrimeDownloadTracker.updateProgress(trackerKey(videoId), written, total, speed)
     }
 
     private fun notifyFinished(videoId: String, success: Boolean, detail: String) {
+        speedCalculators.remove(videoId)
         val title = if (success) {
             getString(R.string.download_saved)
         } else {
@@ -508,18 +721,68 @@ class StorageDownloadService : android.app.Service() {
                     .build()
             )
         }
+
+        // PrimeTube: mirror the terminal state to the in-app queue, then
+        // clean the row up after a short moment
+        val key = trackerKey(videoId)
+        PrimeDownloadTracker.setCancelListener(key, null)
+        cancelFlags.remove(videoId)
+        val finishedAt = System.currentTimeMillis()
+        if (success) {
+            PrimeDownloadTracker.upsert(
+                PrimeActiveDownload(
+                    key = key,
+                    title = detail,
+                    state = PrimeDownloadState.COMPLETED,
+                    finishedAtMs = finishedAt
+                )
+            )
+        } else {
+            PrimeDownloadTracker.upsert(
+                PrimeActiveDownload(
+                    key = key,
+                    title = detail,
+                    state = PrimeDownloadState.FAILED,
+                    message = detail,
+                    finishedAtMs = finishedAt
+                )
+            )
+        }
+        scope.launch {
+            delay(if (success) TERMINAL_ROW_LIFETIME_MS else FAILED_ROW_LIFETIME_MS)
+            PrimeDownloadTracker.remove(key)
+        }
+        runCatching {
+            if (success) stopForeground(STOP_FOREGROUND_DETACH)
+        }
     }
 
-    private fun buildNotification(text: String, progress: Int, total: Long): Notification {
+    private fun isCancelled(videoId: String): Boolean =
+        cancelFlags[videoId]?.get() == true
+
+    private fun finishCancelled(videoId: String) {
+        speedCalculators.remove(videoId)
+        cancelFlags.remove(videoId)
+        val key = trackerKey(videoId)
+        PrimeDownloadTracker.setCancelListener(key, null)
+        PrimeDownloadTracker.remove(key)
+        runCatching {
+            notificationManager.cancel(videoId.notificationId())
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+        }
+    }
+
+    private fun buildNotification(title: String?, text: String, progress: Int, total: Long): Notification {
         val builder = NotificationCompat.Builder(this, DOWNLOAD_CHANNEL_NAME)
             .setSmallIcon(R.drawable.ic_launcher_lockscreen)
-            .setContentTitle(getString(R.string.save_to_storage))
+            .setContentTitle(title ?: getString(R.string.save_to_storage))
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
 
-        if (total > 0 && progress in 1..99) {
-            builder.setProgress(100, progress, false)
+        when {
+            total > 0 && progress >= 0 -> builder.setProgress(100, progress.coerceAtMost(100), false)
+            else -> builder.setProgress(0, 0, true)
         }
         return builder.build()
     }
@@ -544,18 +807,33 @@ class StorageDownloadService : android.app.Service() {
 
     private fun String.notificationId(): Int = (this.hashCode() and 0x7fffffff) % 100000
 
+    private fun trackerKey(videoId: String): String = "storage:$videoId"
+
     override fun onBind(intent: Intent?) = null
+
+    data class Task(
+        val videoId: String,
+        val audioOnly: Boolean,
+        val videoQuality: String? = null,
+        val videoFormat: String? = null,
+        val audioQuality: String? = null,
+        val audioFormat: String? = null
+    )
 
     companion object {
         private const val EXTRA_VIDEO_ID = "video_id"
         private const val EXTRA_AUDIO_ONLY = "audio_only"
+        private const val EXTRA_VIDEO_QUALITY = "video_quality"
+        private const val EXTRA_VIDEO_FORMAT = "video_format"
+        private const val EXTRA_AUDIO_QUALITY = "audio_quality"
+        private const val EXTRA_AUDIO_FORMAT = "audio_format"
         private const val FILE_NAME_MAX_LENGTH = 100
         private const val MAX_CHUNK_RETRIES = 8
         private const val RETRY_DELAY_MS = 300L
         private const val DEFAULT_BUFFER_SIZE = 64 * 1024
+        private const val TERMINAL_ROW_LIFETIME_MS = 3_500L
+        private const val FAILED_ROW_LIFETIME_MS = 6_000L
         private val QUEUE = ConcurrentLinkedQueue<Task>()
-
-        private data class Task(val videoId: String, val audioOnly: Boolean)
 
         /**
          * Enqueue a video (or audio) to be saved as a normal media file into
@@ -568,5 +846,43 @@ class StorageDownloadService : android.app.Service() {
                 .putExtra(EXTRA_AUDIO_ONLY, audioOnly)
             context.startForegroundService(intent)
         }
+
+        /**
+         * PrimeTube: enqueue with the EXACT quality picked in the download
+         * dialog - the selected stream is downloaded as-is instead of always
+         * grabbing the best available quality.
+         */
+        fun enqueue(
+            context: android.content.Context,
+            videoId: String,
+            audioOnly: Boolean,
+            videoQuality: String?,
+            videoFormat: String?,
+            audioQuality: String?,
+            audioFormat: String?
+        ) {
+            val intent = Intent(context, StorageDownloadService::class.java)
+                .putExtra(EXTRA_VIDEO_ID, videoId)
+                .putExtra(EXTRA_AUDIO_ONLY, audioOnly)
+                .putExtra(EXTRA_VIDEO_QUALITY, videoQuality.orEmpty())
+                .putExtra(EXTRA_VIDEO_FORMAT, videoFormat.orEmpty())
+                .putExtra(EXTRA_AUDIO_QUALITY, audioQuality.orEmpty())
+                .putExtra(EXTRA_AUDIO_FORMAT, audioFormat.orEmpty())
+            context.startForegroundService(intent)
+        }
+
+        /**
+         * PrimeTube: cancel a pending/running storage download (called from
+         * the in-app queue on the Downloads page).
+         */
+        fun cancel(context: android.content.Context, videoId: String) {
+            QUEUE.removeAll { it.videoId == videoId }
+            val intent = Intent(context, StorageDownloadService::class.java)
+                .putExtra(EXTRA_VIDEO_ID, videoId)
+                .putExtra(EXTRA_CANCEL, true)
+            runCatching { context.startService(intent) }
+        }
+
+        private const val EXTRA_CANCEL = "cancel"
     }
 }

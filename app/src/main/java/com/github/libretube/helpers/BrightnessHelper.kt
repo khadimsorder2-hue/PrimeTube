@@ -1,12 +1,21 @@
 package com.github.libretube.helpers
 
 import android.app.Activity
+import android.view.Window
 import android.view.WindowManager
 import kotlin.math.exp
 import kotlin.math.ln
 
-class BrightnessHelper(activity: Activity) {
-    private val window = activity.window
+/**
+ * PrimeTube: the brightness helper now follows the window the player is
+ * CURRENTLY displayed in. In fullscreen the player view is re-parented into a
+ * separate dialog window - writing the brightness to the activity window
+ * behind it made the brightness gestures appear completely dead. The
+ * [windowProvider] is evaluated on every access so a window swap is picked up
+ * instantly.
+ */
+class BrightnessHelper(activity: Activity, windowProvider: () -> Window = { activity.window }) {
+    private val window: Window get() = windowProvider()
 
     /**
      * Wrapper for the current screen brightness, linearly scaled between 0 and 1.
@@ -61,7 +70,13 @@ class BrightnessHelper(activity: Activity) {
      * Inverse method for [linearToGamma]
      */
     private fun gammaToLinear(value: Float): Float {
-        return ((SCALING_FACTOR * ln(value * GAMMA_MAX) - LINEAR_OFFSET) / LINEAR_MAX).toFloat()
+        // PrimeTube: BRIGHTNESS_OVERRIDE_NONE (-1) must never leak NaN into
+        // the saved brightness - fall back to a sane mid value instead
+        if (value <= 0f) return DEFAULT_LINEAR_BRIGHTNESS
+        return ((SCALING_FACTOR * ln(value * GAMMA_MAX) - LINEAR_OFFSET) / LINEAR_MAX)
+            .toFloat()
+            .takeUnless { it.isNaN() }
+            ?: DEFAULT_LINEAR_BRIGHTNESS
     }
 
     companion object {
@@ -70,5 +85,8 @@ class BrightnessHelper(activity: Activity) {
         private const val LINEAR_MAX = 100.0
         private const val LINEAR_OFFSET = 9.7
         private const val SCALING_FACTOR = 19.9
+
+        /** PrimeTube: fallback linear brightness when the window value is unset. */
+        private const val DEFAULT_LINEAR_BRIGHTNESS = 0.5f
     }
 }

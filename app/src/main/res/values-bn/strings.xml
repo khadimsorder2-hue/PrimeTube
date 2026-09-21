@@ -423,4 +423,11 @@
     <string name="prime_update_no_apk">সর্বশেষ রিলিজে কোনো APK পাওয়া যায়নি</string>
     <string name="prime_buffer_recover">প্লে আটকে গেছে — ঠিক করা হচ্ছে…</string>
     <string name="prime_pip_audio_bg">ব্যাকগ্রাউন্ডে শুধু অডিও চালু রাখুন</string>
+    <string name="prime_active_downloads">চলমান ডাউনলোড</string>
+    <string name="prime_dl_queued">লাইনে আছে</string>
+    <string name="prime_dl_downloading">ডাউনলোড হচ্ছে</string>
+    <string name="prime_dl_paused">থেমে আছে</string>
+    <string name="prime_dl_completed">সেভ হয়েছে</string>
+    <string name="prime_dl_failed">ডাউনলোড ব্যর্থ</string>
+    <string name="prime_dl_failed_with_reason">ডাউনলোড ব্যর্থ — %1$s</string>
 </resources>

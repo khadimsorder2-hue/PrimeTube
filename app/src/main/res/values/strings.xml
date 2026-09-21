@@ -765,4 +765,11 @@
     <string name="prime_ai_no_subtitles">This video has no subtitles to translate</string>
     <string name="prime_keypad_empty">--</string>
     <string name="prime_keypad_delete">Delete last digit</string>
+    <string name="prime_active_downloads">Active downloads</string>
+    <string name="prime_dl_queued">Queued</string>
+    <string name="prime_dl_downloading">Downloading</string>
+    <string name="prime_dl_paused">Paused</string>
+    <string name="prime_dl_completed">Saved</string>
+    <string name="prime_dl_failed">Download failed</string>
+    <string name="prime_dl_failed_with_reason">Download failed - %1$s</string>
 </resources>

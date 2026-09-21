@@ -5,6 +5,7 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -922,57 +923,86 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     // ---------- brightness / volume gestures ----------
 
+    /**
+     * PrimeTube: ONE shared gesture handler for the whole video area. It is
+     * attached BOTH to the player view and to the controls click-sink, so a
+     * vertical swipe adjusts brightness (left half) or volume (right half)
+     * whether the control overlay is visible or not - and a clean tap still
+     * toggles the controls.
+     */
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupGestures() {
-        binding.livePlayerView.setOnTouchListener { v, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    gestureStartX = event.x
-                    gestureStartY = event.y
+        // CRITICAL: media3's PlayerView.setUseController(false) calls
+        // setClickable(false) in its constructor, which silently OVERRIDES the
+        // layout's android:clickable="true". A non-clickable view never
+        // consumes ACTION_DOWN, so no MOVE events ever reach the touch
+        // listener and the brightness/volume gestures were dead. Restoring
+        // clickability here makes the touch stream flow again.
+        binding.livePlayerView.isClickable = true
+
+        val gestureListener = { v: View, event: MotionEvent ->
+            handleGestureTouch(v, event)
+        }
+        binding.livePlayerView.setOnTouchListener(gestureListener)
+        binding.liveControlsSink.setOnTouchListener(gestureListener)
+    }
+
+    private fun handleGestureTouch(v: View, event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                gestureStartX = event.x
+                gestureStartY = event.y
+                false
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                val dy = gestureStartY - event.y
+                if (!gestureActive && abs(dy) > 55 &&
+                    abs(dy) > abs(event.x - gestureStartX) * 1.4f
+                ) {
+                    gestureActive = true
+                    gestureBrightness = event.x < v.width / 2f
+                    baseBrightness = window.attributes.screenBrightness
+                        .takeIf { it >= 0 } ?: 0.5f
+                    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    baseVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
+                    if (controlsVisible) {
+                        // the gesture starts while the control overlay is open
+                        // (swipe began on the click sink) - close it so the
+                        // video area is clean while adjusting
+                        setControlsVisible(false)
+                    }
+                }
+                if (gestureActive) {
+                    val ratio = dy / v.height
+                    if (gestureBrightness) applyBrightness(ratio) else applyVolume(ratio)
+                    true
+                } else {
                     false
                 }
-
-                MotionEvent.ACTION_MOVE -> {
-                    val dy = gestureStartY - event.y
-                    if (!gestureActive && abs(dy) > 55 &&
-                        abs(dy) > abs(event.x - gestureStartX) * 1.4f
-                    ) {
-                        gestureActive = true
-                        gestureBrightness = event.x < v.width / 2f
-                        baseBrightness = window.attributes.screenBrightness
-                            .takeIf { it >= 0 } ?: 0.5f
-                        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                        baseVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
-                    }
-                    if (gestureActive) {
-                        val ratio = dy / v.height
-                        if (gestureBrightness) applyBrightness(ratio) else applyVolume(ratio)
-                        true
-                    } else {
-                        false
-                    }
-                }
-
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (gestureActive) {
-                        gestureActive = false
-                        handler.postDelayed({ _binding?.liveGesturePill?.isGone = true }, 700)
-                        true
-                    } else if (event.actionMasked == MotionEvent.ACTION_UP) {
-                        // PrimeTube: a clean tap (no gesture) toggles the controls
-                        val moved = abs(event.x - gestureStartX) + abs(event.y - gestureStartY)
-                        if (moved < 60) {
-                            toggleControls()
-                            true
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                }
-
-                else -> false
             }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (gestureActive) {
+                    gestureActive = false
+                    handler.postDelayed({ _binding?.liveGesturePill?.isGone = true }, 700)
+                    true
+                } else if (event.actionMasked == MotionEvent.ACTION_UP && v.id == R.id.livePlayerView) {
+                    // PrimeTube: a clean tap (no gesture) toggles the controls.
+                    // On the sink a tap is handled by its click listener instead.
+                    val moved = abs(event.x - gestureStartX) + abs(event.y - gestureStartY)
+                    if (moved < 60) {
+                        toggleControls()
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+
+            else -> false
         }
     }
 
