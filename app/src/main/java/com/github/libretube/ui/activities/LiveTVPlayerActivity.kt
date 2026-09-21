@@ -948,7 +948,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     }
 
     private fun handleGestureTouch(v: View, event: MotionEvent): Boolean {
-        when (event.actionMasked) {
+        return when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 gestureStartX = event.x
                 gestureStartY = event.y

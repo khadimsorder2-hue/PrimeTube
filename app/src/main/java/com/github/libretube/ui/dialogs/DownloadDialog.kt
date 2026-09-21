@@ -6,8 +6,6 @@ import android.os.Bundle
 import android.text.InputFilter
 import android.text.format.Formatter
 import android.util.Log
-import android.view.View
-import android.widget.AdapterView
 import android.widget.Toast
 import androidx.core.os.bundleOf
 import androidx.core.view.isGone
@@ -39,10 +37,12 @@ class DownloadDialog : DialogFragment() {
     private lateinit var videoId: String
     private var onDownloadConfirm = {}
 
-    // PrimeTube: the streams picked in the two spinners - read by the
-    // "save to storage" button so the SELECTED quality gets downloaded
-    private var selectedVideoStream: PipedStream? = null
-    private var selectedAudioStream: PipedStream? = null
+    // PrimeTube: the stream lists behind the two spinners - the "save to
+    // storage" button reads the CURRENT spinner positions from these so the
+    // EXACT picked quality gets downloaded (also covers restored selections
+    // that the user never touched)
+    private var videoStreamList: List<PipedStream> = emptyList()
+    private var audioStreamList: List<PipedStream> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,27 +66,30 @@ class DownloadDialog : DialogFragment() {
                     onDownloadConfirm.invoke()
                 }
                 // PrimeTube: "save to storage" - writes the media DIRECTLY into
-                // the phone storage (Downloads/PrimeTube): best muxed MP4, or
-                // the best audio file when no video quality is selected
+                // the phone storage (Downloads/PrimeTube) using the EXACT
+                // quality picked in the spinners (best quality only when the
+                // quick-save from the video menu was used)
                 getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener {
-                    val videoSelected = binding.videoSpinner.selectedItemPosition > 0
-                    val audioSelected = binding.audioSpinner.selectedItemPosition > 0
-                    if (!videoSelected && !audioSelected) {
+                    val videoPosition = binding.videoSpinner.selectedItemPosition - 1
+                    val audioPosition = binding.audioSpinner.selectedItemPosition - 1
+                    if (videoPosition == -1 && audioPosition == -1) {
                         Toast.makeText(context, R.string.nothing_selected, Toast.LENGTH_SHORT)
                             .show()
                         return@setOnClickListener
                     }
-                    val audioOnly = !videoSelected
+                    val audioOnly = videoPosition == -1
+                    val pickedVideo = videoStreamList.getOrNull(videoPosition)
+                    val pickedAudio = audioStreamList.getOrNull(audioPosition)
                     Toast.makeText(context, R.string.prime_saving_to_storage, Toast.LENGTH_SHORT)
                         .show()
                     StorageDownloadService.enqueue(
                         requireContext(),
                         videoId,
                         audioOnly,
-                        selectedVideoStream?.quality,
-                        selectedVideoStream?.format,
-                        selectedAudioStream?.quality,
-                        selectedAudioStream?.format
+                        pickedVideo?.quality,
+                        pickedVideo?.format,
+                        pickedAudio?.quality,
+                        pickedAudio?.format
                     )
                     dismiss()
                 }
@@ -156,25 +159,10 @@ class DownloadDialog : DialogFragment() {
             it.add(0, getString(R.string.no_subtitle))
         }
 
+        videoStreamList = videoStreams
+        audioStreamList = audioStreams
+
         restorePreviousSelections(binding, videoStreams, audioStreams, subtitles)
-
-        // PrimeTube: the "save to storage" button needs the same selection as
-        // the regular download - so the EXACT picked quality is saved instead
-        // of always grabbing the best one
-        binding.videoSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedVideoStream = videoStreams.getOrNull(position - 1)
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
-        binding.audioSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedAudioStream = audioStreams.getOrNull(position - 1)
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
 
         onDownloadConfirm = onDownloadConfirm@{
             val videoPosition = binding.videoSpinner.selectedItemPosition - 1

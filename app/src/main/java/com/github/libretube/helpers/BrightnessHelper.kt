@@ -14,7 +14,10 @@ import kotlin.math.ln
  * [windowProvider] is evaluated on every access so a window swap is picked up
  * instantly.
  */
-class BrightnessHelper(activity: Activity, windowProvider: () -> Window = { activity.window }) {
+class BrightnessHelper(
+    activity: Activity,
+    private val windowProvider: () -> Window = { activity.window }
+) {
     private val window: Window get() = windowProvider()
 
     /**
