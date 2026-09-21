@@ -222,8 +222,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     val requested = primeRequestedQualityHeight
                     if (requested != null &&
                         exoPlayer?.videoSize?.height == 0 &&
-                        trackSelector?.parameters
-                            ?.isTrackTypeDisabled(C.TRACK_TYPE_VIDEO) == false
+                        !isAudioOnlyPlayer
                     ) {
                         trackSelector?.updateParameters {
                             setMinVideoSize(Int.MIN_VALUE, 0)
@@ -502,9 +501,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 return@Runnable
             }
             // audio-only mode has no video track by design - nothing to verify
-            val videoDisabled = trackSelector?.parameters
-                ?.isTrackTypeDisabled(C.TRACK_TYPE_VIDEO) == true
-            if (videoDisabled) {
+            if (isAudioOnlyPlayer) {
                 primeRequestedQualityHeight = null
                 return@Runnable
             }
