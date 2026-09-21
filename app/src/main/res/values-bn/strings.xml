@@ -422,7 +422,9 @@
     <string name="prime_update_failed">আপডেট চেক করা যায়নি — ইন্টারনেট দেখুন</string>
     <string name="prime_update_no_apk">সর্বশেষ রিলিজে কোনো APK পাওয়া যায়নি</string>
     <string name="prime_buffer_recover">প্লে আটকে গেছে — ঠিক করা হচ্ছে…</string>
-    <string name="prime_pip_audio_bg">ব্যাকগ্রাউন্ডে শুধু অডিও চালু রাখুন</string>
+    <string name="prime_pip_play">প্লে করুন</string>
+    <string name="prime_pip_rewind">১০ সেকেন্ড পিছিয়ে যান</string>
+    <string name="prime_pip_forward">১০ সেকেন্ড সামনে যান</string>
     <string name="prime_active_downloads">চলমান ডাউনলোড</string>
     <string name="prime_dl_queued">লাইনে আছে</string>
     <string name="prime_dl_downloading">ডাউনলোড হচ্ছে</string>

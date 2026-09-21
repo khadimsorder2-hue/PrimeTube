@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.media.AudioManager
@@ -404,9 +405,6 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             resetChannelSearch()
         }
         binding.liveCenterPlay.setOnClickListener { togglePlayback() }
-        // PrimeTube: the PiP headphone button - leaves the PiP window and keeps
-        // the channel's audio playing in the background (video track disabled)
-        binding.livePipAudioBtn.setOnClickListener { exitPipToAudioBackground() }
 
         setupGestures()
         registerNetworkWatcher()
@@ -1047,16 +1045,28 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     /**
      * PrimeTube: a clean Live TV PiP window - just the video, aspect ratio
-     * matched to the stream, auto-enter while playing.
+     * matched to the stream, auto-enter while playing. The transition zooms
+     * from the player's on-screen rect for a smooth YouTube-like animation.
      */
     private fun primePipParams(): PictureInPictureParamsCompat {
         val builder = PictureInPictureParamsCompat.Builder()
             .setAutoEnterEnabled(player?.isPlaying == true)
+            // PrimeTube: seamless resize OFF - resizing content while the
+            // window is still animating is what made PiP feel jumpy
+            .setSeamlessResizeEnabled(false)
         val videoSize = player?.videoSize
         if (videoSize != null && videoSize.width > 0 && videoSize.height > 0) {
             builder.setAspectRatio(videoSize)
         } else {
             builder.setAspectRatio(Rational(16, 9))
+        }
+        // PrimeTube: zoom the transition from the actual video rect
+        runCatching {
+            val view = _binding?.livePlayerView ?: return@runCatching
+            if (!view.isShown || view.width == 0 || view.height == 0) return@runCatching
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            builder.setSourceRectHint(Rect(loc[0], loc[1], loc[0] + view.width, loc[1] + view.height))
         }
         return builder.build()
     }
@@ -1065,33 +1075,6 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         if (!isPipAvailable || player?.isPlaying != true) return
         runCatching {
             PictureInPictureCompat.enterPictureInPictureMode(this, primePipParams())
-        }
-    }
-
-    /**
-     * PrimeTube: the Live TV PiP headphone button. Leaves the PiP window and
-     * keeps the channel playing as AUDIO ONLY in the background: the video
-     * track gets disabled (cheap on data and battery), the task moves to the
-     * back and [onStop] is told not to tear the player down. Returning to the
-     * app re-enables the video track at the live edge.
-     */
-    private fun exitPipToAudioBackground() {
-        primeLiveAudioBackground = true
-        setLiveVideoTrackEnabled(false)
-        moveTaskToBack(false)
-    }
-
-    /**
-     * PrimeTube: enables/disables the video decoder track. Audio-only mode
-     * saves data and battery while the channel plays in the background.
-     */
-    private fun setLiveVideoTrackEnabled(enabled: Boolean) {
-        val p = player ?: return
-        runCatching {
-            p.trackSelectionParameters = p.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !enabled)
-                .build()
         }
     }
 
@@ -1106,41 +1089,22 @@ class LiveTVPlayerActivity : AppCompatActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         if (_binding == null) return
         if (isInPictureInPictureMode) {
-            // clean floating window: no overlays, no panels, no keypad - only
-            // the headphone (background audio) button, same design as the
-            // YouTube player's PiP window
+            // clean floating window: no overlays, no panels, no keypad
             setControlsVisible(false)
             numberKeypadDialog?.dismiss()
             _binding?.liveQueueRoot?.isGone = true
             _binding?.liveGesturePill?.isGone = true
-            _binding?.livePipAudioBtn?.isVisible = true
         } else if (_binding != null && player != null) {
             // back in fullscreen (the window was expanded) - show the controls
             // again briefly; a dismissed window just finishes the activity
-            _binding?.livePipAudioBtn?.isGone = true
             setControlsVisible(true)
         }
     }
 
     // ---------- lifecycle: no background playback, ever ----------
 
-    /**
-     * PrimeTube: true while the channel's AUDIO is intentionally playing in the
-     * background after the PiP headphone button was tapped (video track
-     * disabled, task moved to the back). While set, onStop must NOT tear the
-     * player down - otherwise there would be nothing left to background.
-     */
-    private var primeLiveAudioBackground = false
-
     override fun onResume() {
         super.onResume()
-        if (primeLiveAudioBackground) {
-            // PrimeTube: back from the headphone audio-background - re-enable
-            // the video track and keep watching at the live edge
-            primeLiveAudioBackground = false
-            setLiveVideoTrackEnabled(true)
-            player?.play()
-        }
         // returning to a released screen (recents/app switch): restart the
         // live stream - live TV always resumes at the live edge anyway
         if (player == null && everStarted) {
@@ -1152,11 +1116,6 @@ class LiveTVPlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        // PrimeTube: the headphone button in PiP backgrounded the audio on
-        // purpose - keep the player alive (audio-only) until the user returns.
-        // Any OTHER leave (recents swipe, other app) stops playback completely,
-        // exactly like before.
-        if (primeLiveAudioBackground) return
         // PrimeTube rule: leaving the player = playback stops completely
         binding.livePlayerView.player = null
         player?.release()

@@ -3,6 +3,7 @@ package com.github.libretube.ui.fragments
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Dialog
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
 import android.media.session.PlaybackState
 import android.Manifest
 import android.os.Build
@@ -37,8 +39,10 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.motion.widget.MotionLayout
 import androidx.constraintlayout.motion.widget.TransitionAdapter
+import androidx.core.app.RemoteActionCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.net.toUri
 import androidx.core.os.bundleOf
@@ -188,10 +192,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
 
     // check if pip is entered via the dedicated button
     private var isEnteringPiPMode = false
-
-    // PrimeTube: set when the PiP headphone button backgrounded the task on
-    // purpose - the PiP exit handler must NOT pause the player in that case
-    private var primePipAudioBackgroundRequested = false
 
     private val baseActivity get() = activity as AbstractPlayerHostActivity
     private val windowInsetsControllerCompat
@@ -521,6 +521,16 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = FragmentPlayerBinding.bind(view)
         super.onViewCreated(view, savedInstanceState)
+
+        // PrimeTube: feed the video's stream metadata heights into the quality
+        // dialog so the video's EXACT maximum resolution is always offered
+        binding.player.primeStreamResolutionsProvider = {
+            if (::streams.isInitialized) {
+                streams.videoStreams.mapNotNull { s -> s.height?.takeIf { it > 0 } }.distinct()
+            } else {
+                emptyList()
+            }
+        }
 
         // manually apply additional padding for edge-to-edge compatibility
         activity?.getSystemInsets()?.let { systemBars ->
@@ -1430,9 +1440,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             closedVideo = false
         }
 
-        // PrimeTube: a background-audio session ended - full video again
-        primePipAudioBackgroundRequested = false
-
         // re-enable the autoplay countdown
         setAutoPlayCountdownEnabled(PlayerHelper.autoPlayCountdown)
 
@@ -1908,11 +1915,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             // hide and disable exoPlayer controls
             disableController()
 
-            // PrimeTube: clean PiP - only the auto-hiding progress slider and
-            // one small headphone button (audio-only background play)
-            binding.player.onPrimePipAudioClick = {
-                exitPrimePipToAudioBackground()
-            }
+            // PrimeTube: clean PiP - only the slim auto-hiding progress line
             binding.player.setPrimePipMode(true)
 
             binding.player.updateCurrentSubtitle(null)
@@ -1942,14 +1945,8 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             // close button got clicked in PiP mode
             // pause the video and keep the app alive
             if (lifecycle.currentState == Lifecycle.State.CREATED) {
-                // PrimeTube: our headphone button backgrounded the task on
-                // purpose - keep the audio running instead of pausing
-                if (primePipAudioBackgroundRequested) {
-                    primePipAudioBackgroundRequested = false
-                } else {
-                    playerController.pause()
-                    closedVideo = true
-                }
+                playerController.pause()
+                closedVideo = true
             }
 
             binding.player.updateCurrentSubtitle(viewModel.currentCaptionId)
@@ -1964,22 +1961,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
     fun onUserLeaveHint() {
         if (shouldStartPiP()) {
             PictureInPictureCompat.enterPictureInPictureMode(requireActivity(), pipParams)
-        }
-    }
-
-    /**
-     * PrimeTube: PiP headphone button - hand the playback over to the audio
-     * player (switchToAudioMode) and dismiss the PiP window by moving the task
-     * to the back. The exact same proven flow as the "background" media action,
-     * so the audio keeps running reliably in the background.
-     */
-    private fun exitPrimePipToAudioBackground() {
-        primePipAudioBackgroundRequested = true
-        switchToAudioMode()
-        // wait some time in order for the service to get started properly
-        handler.postDelayed(500) {
-            pipActivity?.moveTaskToBack(false)
-            pipActivity = null
         }
     }
 
@@ -2002,22 +1983,89 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             val isPlaying = ::playerController.isInitialized && playerController.isPlaying
 
             PictureInPictureParamsCompat.Builder()
-                // PrimeTube: a CLEAN pip window. The headphone (background audio)
-                // button lives ON the window itself - always visible, in its own
-                // place, never merged into the system chrome row next to the
-                // close button. No app remote actions are registered.
                 .setAutoEnterEnabled(isPlaying)
+                // PrimeTube: seamless resize OFF - resizing the content while
+                // the window is still animating is what made PiP feel jumpy;
+                // a normal animated resize always looks smooth
+                .setSeamlessResizeEnabled(false)
                 .apply {
                     if (isPlaying) {
                         setAspectRatio(playerController.videoSize)
                     }
+                    // PrimeTube: zoom the transition from the actual video
+                    // rect instead of a generic fade - the smooth YouTube-like
+                    // enter/exit animation
+                    primeSourceRectHint()?.let { setSourceRectHint(it) }
                 }
+                // PrimeTube: seek/play lives in the system PiP menu - while in
+                // PiP the system consumes every tap on the window itself, so
+                // remote actions are the ONLY touch surface that works
+                .setActions(primePipActions(isPlaying))
                 .build()
         }
 
     /**
+     * PrimeTube: the on-screen rect of the player view - the PiP zoom
+     * animation starts from this rect instead of a generic fade.
+     */
+    private fun primeSourceRectHint(): Rect? {
+        return runCatching {
+            val view = _binding?.player ?: return null
+            if (!view.isShown || view.width == 0 || view.height == 0) return null
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            Rect(loc[0], loc[1], loc[0] + view.width, loc[1] + view.height)
+        }.getOrNull()
+    }
+
+    /**
+     * PrimeTube: PiP remote actions (back 10s / play-pause / forward 10s).
+     * They fire the player service directly - the service owns the player,
+     * so this works no matter which screen the task is on.
+     */
+    private fun primePipActions(isPlaying: Boolean): List<RemoteActionCompat> {
+        val context = context ?: return emptyList()
+
+        fun pipAction(icon: Int, title: Int, requestCode: Int, action: String): RemoteActionCompat {
+            val intent = PendingIntent.getService(
+                context,
+                requestCode,
+                Intent(context, OnlinePlayerService::class.java).setAction(action),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            return RemoteActionCompat(
+                IconCompat.createWithResource(context, icon),
+                context.getString(title),
+                context.getString(title),
+                intent
+            )
+        }
+
+        return listOf(
+            pipAction(
+                R.drawable.ic_rewind,
+                R.string.prime_pip_rewind,
+                101,
+                AbstractPlayerService.PRIME_PIP_SEEK_BACK
+            ),
+            pipAction(
+                if (isPlaying) R.drawable.ic_pause_filled else R.drawable.ic_play_filled,
+                if (isPlaying) R.string.pause else R.string.prime_pip_play,
+                102,
+                AbstractPlayerService.PRIME_PIP_PLAY_PAUSE
+            ),
+            pipAction(
+                R.drawable.ic_forward,
+                R.string.prime_pip_forward,
+                103,
+                AbstractPlayerService.PRIME_PIP_SEEK_FORWARD
+            )
+        )
+    }
+
+    /**
      * PrimeTube: PiP is back by request - stable, smooth and resizable, with
-     * a clean window: no buttons, just the auto-hiding progress slider.
+     * a clean window: just the slim auto-hiding progress line.
      */
     private fun isPipAvailable(): Boolean {
         return PictureInPictureCompat.isPictureInPictureAvailable(requireContext())

@@ -397,6 +397,36 @@ open class OnlinePlayerService : AbstractPlayerService() {
         if (primeSourceEscalation < 2) primeSourceEscalation++
     }
 
+    /**
+     * PrimeTube: the user picked a video quality the current source cannot
+     * provide (e.g. 1440p/2160p while playing from a capped pipeline). Move
+     * one step up the pipeline - level 1 uses the official DASH manifest,
+     * which carries EVERY adaptive format up to the video's exact maximum -
+     * and rebuild the source at the current position. The track selection
+     * parameters (min/max = the picked height) are already set, so as soon
+     * as the fuller source is ready the chosen quality actually plays.
+     */
+    override fun primeOnQualityEscalationNeeded(requestedHeight: Int) {
+        // only the automatic SABR pipeline (level 0) can be out-qualified -
+        // level 1/2 already play from the fullest DASH/HLS source available
+        if (!isVideoIdReady() || isPrimeRecovering || isTransitioning) return
+        if (primeSourceEscalation != 0) return
+        runCatching {
+            escalateSourcePipeline()
+            val resumePosition = exoPlayer?.currentPosition?.takeIf { it > 0 } ?: 0L
+            sourceErrorRetries = 0
+            sourceErrorRecovery = true
+            isPrimeRecovering = true
+            scope.launch {
+                delay(300L)
+                isTransitioning = true
+                startTimestampSeconds = (resumePosition / 1000L).takeIf { it > 0 }
+                startPlayback()
+                handler.post { exoPlayer?.play() }
+            }
+        }
+    }
+
     private fun configurePlayer(seekToPositionMs: Long) {
         // seek to the previous position if available
         if (seekToPositionMs != 0L) {

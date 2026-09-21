@@ -269,6 +269,11 @@ class SabrClient private constructor(
         if (MimeTypes.isAudio(representation.format.containerMimeType)) {
             audioFormat = representation
         } else if (MimeTypes.isVideo(representation.format.containerMimeType)) {
+            // PrimeTube: a manual quality change must reach the server
+            // IMMEDIATELY - never wait out a backoff for a format the user
+            // just requested, otherwise the old rendition keeps playing and
+            // the quality picker looks broken
+            backoffTime = null
             videoFormat = representation
         }
     }

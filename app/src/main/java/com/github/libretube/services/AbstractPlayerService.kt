@@ -203,10 +203,23 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
             }
 
             args.containsKey(PlayerCommand.SET_RESOLUTION.name) -> {
+                val resolution = args.getInt(PlayerCommand.SET_RESOLUTION.name)
                 trackSelector?.updateParameters {
-                    val resolution = args.getInt(PlayerCommand.SET_RESOLUTION.name)
                     setMinVideoSize(Int.MIN_VALUE, resolution)
                     setMaxVideoSize(Int.MAX_VALUE, resolution)
+                }
+                // PrimeTube: if the loaded source cannot provide the exact
+                // quality the user picked, rebuild from a fuller source
+                // (official DASH carries every adaptive format) so the
+                // selected quality actually plays instead of staying "limited"
+                val exo = exoPlayer
+                if (resolution != Int.MAX_VALUE && exo != null) {
+                    val hasExact = exo.currentTracks.groups.any { group ->
+                        (0 until group.length).any {
+                            group.getTrackFormat(it).height == resolution
+                        }
+                    }
+                    if (!hasExact) primeOnQualityEscalationNeeded(resolution)
                 }
             }
 
@@ -381,8 +394,30 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         promiseForeground()
+        // PrimeTube: PiP remote actions - while in picture-in-picture the
+        // system consumes every tap on the window itself, so the system PiP
+        // menu is the only reliable touch surface. The actions fire the
+        // service directly; the service owns the player, so the commands
+        // always land on the right (main) thread.
+        when (intent?.action) {
+            PRIME_PIP_PLAY_PAUSE -> runCatching {
+                exoPlayer?.let { player ->
+                    if (player.isPlaying) player.pause() else player.play()
+                }
+            }
+            PRIME_PIP_SEEK_BACK -> runCatching { exoPlayer?.seekBack(10_000) }
+            PRIME_PIP_SEEK_FORWARD -> runCatching { exoPlayer?.seekForward(10_000) }
+        }
         return super.onStartCommand(intent, flags, startId)
     }
+
+    /**
+     * PrimeTube: the user picked a video quality that the currently loaded
+     * source cannot provide. Subclasses may rebuild their source from a
+     * fuller pipeline (e.g. the official DASH manifest) and re-apply the
+     * track selection parameters so the chosen quality actually plays.
+     */
+    open fun primeOnQualityEscalationNeeded(@Suppress("UNUSED_PARAMETER") requestedHeight: Int) = Unit
 
     private fun promiseForeground() {
         runCatching {
@@ -720,6 +755,11 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
         private const val START_SERVICE_ACTION = "start_service_action"
         private const val STOP_SERVICE_ACTION = "stop_service_action"
         private const val RUN_PLAYER_COMMAND_ACTION = "run_player_command_action"
+
+        // PrimeTube: PiP remote actions (system PiP menu buttons)
+        const val PRIME_PIP_PLAY_PAUSE = "com.github.libretube.action.PRIME_PIP_PLAY_PAUSE"
+        const val PRIME_PIP_SEEK_BACK = "com.github.libretube.action.PRIME_PIP_SEEK_BACK"
+        const val PRIME_PIP_SEEK_FORWARD = "com.github.libretube.action.PRIME_PIP_SEEK_FORWARD"
 
         private const val PRIME_PLAYER_ACTION =
             "com.github.libretube.services.AbstractPlayerService.FOREGROUND_ACTION"

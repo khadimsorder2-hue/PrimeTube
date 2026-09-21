@@ -299,54 +299,41 @@ class CustomExoPlayerView(
     private var noFullscreenResolution: Int? = null
 
     /**
-     * PrimeTube: PiP controls wiring - a slim always-visible bottom bar with
-     * a drag-seek slider plus ONE small headphone button at the very
-     * bottom-right corner (clear of the system's close button at the top).
+     * PrimeTube: PiP controls wiring - a slim always-visible (while playing)
+     * red progress LINE at the bottom of the window. In PiP the system
+     * consumes every tap for its own chrome, so no in-window buttons or
+     * sliders: seek/play lives in the system PiP menu via remote actions.
      */
     private var primePipMode = false
-    private var primePipSeekDragging = false
 
     /**
-     * PrimeTube: invoked when the PiP headphone button is tapped - the player
-     * fragment leaves the PiP window and keeps the audio running in background.
+     * PrimeTube: extra resolutions from the video's stream metadata - makes
+     * sure the quality dialog offers the video's EXACT maximum resolutions
+     * even when the loaded manifest only carries a subset of the formats.
      */
-    var onPrimePipAudioClick: (() -> Unit)? = null
+    var primeStreamResolutionsProvider: (() -> List<Int>)? = null
 
     private val primePipTicker = object : Runnable {
         override fun run() {
-            if (primePipMode) {
-                syncPrimePipProgress()
-                postDelayed(this, 500)
-            }
+            if (!primePipMode) return
+            syncPrimePipLine()
+            postDelayed(this, 500)
         }
     }
 
-    private fun setupPrimePipProgress() {
-        backgroundBinding.primePipAudioBtn.setOnClickListener {
-            onPrimePipAudioClick?.invoke()
+    private fun syncPrimePipLine() {
+        val p = player ?: return
+        val line = backgroundBinding.primePipLine
+        val duration = p.duration
+        if (duration > 0) {
+            line.max = 100000
+            line.progress = ((p.currentPosition.coerceIn(0, duration) * 100000L) / duration).toInt()
+            // PrimeTube: auto-hide - the line only shows while actually playing
+            line.isVisible = p.isPlaying
+        } else {
+            // live stream - no duration, no meaningful progress
+            line.isGone = true
         }
-        backgroundBinding.primePipSeek.setOnSeekBarChangeListener(
-            object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
-                    if (!fromUser) return
-                    val duration = player?.duration ?: 0L
-                    if (duration > 0) {
-                        backgroundBinding.primePipTime.text =
-                            primeMsToTime(value.toLong()) + " / " + primeMsToTime(duration)
-                    }
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {
-                    primePipSeekDragging = true
-                }
-
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                    primePipSeekDragging = false
-                    seekBar?.progress?.let { player?.seekTo(it.toLong()) }
-                    syncPrimePipProgress()
-                }
-            }
-        )
     }
 
     /**
@@ -364,56 +351,13 @@ class CustomExoPlayerView(
                 setUseController(false)
                 hideController()
             }
-            // PrimeTube: the progress bar is ALWAYS visible in PiP - the user
-            // can drag-seek without ever tapping the window (tapping would
-            // summon the system's PiP chrome with its close button)
-            syncPrimePipProgress()
-            backgroundBinding.primePipProgressRoot.isVisible = true
-            // PrimeTube: the single small headphone button - audio-only background.
-            // ALWAYS visible, at the very bottom-right corner (never overlaps
-            // the system's PiP close button, which sits at the top).
-            backgroundBinding.primePipAudioBtn.isVisible = true
+            // PrimeTube: the slim red progress line - auto-hides when paused
+            syncPrimePipLine()
             post(primePipTicker)
         } else {
             removeCallbacks(primePipTicker)
-            primePipSeekDragging = false
-            backgroundBinding.primePipProgressRoot.isGone = true
-            backgroundBinding.primePipAudioBtn.isGone = true
+            backgroundBinding.primePipLine.isGone = true
             runCatching { setUseController(true) }
-        }
-    }
-
-    private fun syncPrimePipProgress() {
-        val p = player ?: return
-        val duration = p.duration
-        val seek = backgroundBinding.primePipSeek
-        val time = backgroundBinding.primePipTime
-        val hasDuration = duration > 0
-        seek.isVisible = hasDuration
-        if (hasDuration) {
-            seek.max = duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-            if (!primePipSeekDragging) {
-                seek.progress = p.currentPosition.coerceIn(0, duration)
-                    .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-            }
-        }
-        time.text = if (hasDuration) {
-            primeMsToTime(p.currentPosition) + " / " + primeMsToTime(duration)
-        } else {
-            // live stream - no duration, no slider, just a small LIVE badge
-            "LIVE"
-        }
-    }
-
-    private fun primeMsToTime(ms: Long): String {
-        val totalSeconds = (ms.coerceAtLeast(0L)) / 1000
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        return if (hours > 0) {
-            String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            String.format(Locale.US, "%d:%02d", minutes, seconds)
         }
     }
 
@@ -437,9 +381,6 @@ class CustomExoPlayerView(
         )
 
         audioHelper = AudioHelper(context)
-
-        // PrimeTube: wire the clean PiP progress slider (auto-hides, can seek)
-        setupPrimePipProgress()
 
         // PrimeTube: on TVs the 2 s auto-hide must not fight remote focus
         // navigation - restart the countdown whenever the focus moves between
@@ -1477,6 +1418,14 @@ class CustomExoPlayerView(
             .filter { it > 0 }
             .map { VideoResolution("${it}p", it) }
             .toSortedSet(compareByDescending { it.resolution })
+
+        // PrimeTube: make sure the video's EXACT maximum resolutions are
+        // always offered - merge in the heights from the stream metadata so
+        // the user can pick the true 1440p/2160p top quality even when the
+        // loaded manifest only carries a subset of the formats
+        runCatching { primeStreamResolutionsProvider?.invoke() }.getOrNull()?.forEach { height ->
+            if (height > 0) resolutions.add(VideoResolution("${height}p", height))
+        }
 
         resolutions.add(VideoResolution(context.getString(R.string.auto_quality), Int.MAX_VALUE))
         return resolutions.toList()

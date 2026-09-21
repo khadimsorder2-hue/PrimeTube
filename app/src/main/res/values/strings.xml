@@ -630,7 +630,9 @@
     <string name="prime_storage_denied">Storage permission denied</string>
     <string name="prime_saving_to_storage">Saving to Downloads/PrimeTube…</string>
     <string name="prime_buffer_recover">Playback stuck — recovering…</string>
-    <string name="prime_pip_audio_bg">Listen in the background</string>
+    <string name="prime_pip_play">Play</string>
+    <string name="prime_pip_rewind">Back 10 seconds</string>
+    <string name="prime_pip_forward">Forward 10 seconds</string>
 
     <!-- PrimeTube in-app updater -->
     <string name="prime_update">Update</string>
