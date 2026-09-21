@@ -1041,13 +1041,22 @@ class LiveTVPlayerActivity : AppCompatActivity() {
      */
     private fun exitPipToAudioBackground() {
         primeLiveAudioBackground = true
-        runCatching {
-            player?.trackSelectionParameters = player?.trackSelectionParameters
-                ?.buildUpon()
-                ?.setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                ?.build()
-        }
+        setLiveVideoTrackEnabled(false)
         moveTaskToBack(false)
+    }
+
+    /**
+     * PrimeTube: enables/disables the video decoder track. Audio-only mode
+     * saves data and battery while the channel plays in the background.
+     */
+    private fun setLiveVideoTrackEnabled(enabled: Boolean) {
+        val p = player ?: return
+        runCatching {
+            p.trackSelectionParameters = p.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !enabled)
+                .build()
+        }
     }
 
     override fun onUserLeaveHint() {
@@ -1093,12 +1102,7 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             // PrimeTube: back from the headphone audio-background - re-enable
             // the video track and keep watching at the live edge
             primeLiveAudioBackground = false
-            runCatching {
-                player?.trackSelectionParameters = player?.trackSelectionParameters
-                    ?.buildUpon()
-                    ?.setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
-                    ?.build()
-            }
+            setLiveVideoTrackEnabled(true)
             player?.play()
         }
         // returning to a released screen (recents/app switch): restart the
