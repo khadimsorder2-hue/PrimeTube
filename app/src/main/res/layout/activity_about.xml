@@ -17,14 +17,11 @@
             android:fitsSystemWindows="true"
             app:title="@string/about" />
 
-        <com.github.libretube.ui.views.AppIconHeader
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
         <!--
             PrimeTube: the About page intentionally contains ONLY the developer info.
-            All upstream entries (donate, website, GitHub, Piped, translate, license,
-            device info, help) have been removed by request of the app owner.
+            The big app-icon header (logo + app name + version) was removed by request
+            of the app owner; all upstream entries (donate, website, GitHub, Piped,
+            translate, license, device info, help) are gone as well.
         -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/developer"

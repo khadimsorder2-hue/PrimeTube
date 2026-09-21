@@ -404,7 +404,6 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             resetChannelSearch()
         }
         binding.liveCenterPlay.setOnClickListener { togglePlayback() }
-        binding.liveControlsSink.setOnClickListener { setControlsVisible(false) }
         // PrimeTube: the PiP headphone button - leaves the PiP window and keeps
         // the channel's audio playing in the background (video track disabled)
         binding.livePipAudioBtn.setOnClickListener { exitPipToAudioBackground() }
@@ -934,10 +933,9 @@ class LiveTVPlayerActivity : AppCompatActivity() {
     private fun setupGestures() {
         // CRITICAL: media3's PlayerView.setUseController(false) calls
         // setClickable(false) in its constructor, which silently OVERRIDES the
-        // layout's android:clickable="true". A non-clickable view never
-        // consumes ACTION_DOWN, so no MOVE events ever reach the touch
-        // listener and the brightness/volume gestures were dead. Restoring
-        // clickability here makes the touch stream flow again.
+        // layout's android:clickable="true". The touch listener below now
+        // consumes ACTION_DOWN regardless, but keep the clickability restored
+        // here as well for correct tap/pressed-state behaviour.
         binding.livePlayerView.isClickable = true
 
         val gestureListener = { v: View, event: MotionEvent ->
@@ -952,7 +950,11 @@ class LiveTVPlayerActivity : AppCompatActivity() {
             MotionEvent.ACTION_DOWN -> {
                 gestureStartX = event.x
                 gestureStartY = event.y
-                false
+                // PrimeTube: CONSUME the down event unconditionally. This
+                // guarantees the whole MOVE stream reaches this listener even
+                // if media3 re-applies setClickable(false) at any point -
+                // a non-consuming DOWN was the root cause of dead gestures.
+                true
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -987,12 +989,16 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                     gestureActive = false
                     handler.postDelayed({ _binding?.liveGesturePill?.isGone = true }, 700)
                     true
-                } else if (event.actionMasked == MotionEvent.ACTION_UP && v.id == R.id.livePlayerView) {
-                    // PrimeTube: a clean tap (no gesture) toggles the controls.
-                    // On the sink a tap is handled by its click listener instead.
-                    val moved = abs(event.x - gestureStartX) + abs(event.y - gestureStartY)
-                    if (moved < 60) {
+                } else if (event.actionMasked == MotionEvent.ACTION_UP &&
+                    abs(event.x - gestureStartX) + abs(event.y - gestureStartY) < 60
+                ) {
+                    // PrimeTube: a clean tap (no gesture). On the video area it
+                    // toggles the controls; on the sink it closes them.
+                    if (v.id == R.id.livePlayerView) {
                         toggleControls()
+                        true
+                    } else if (v.id == R.id.liveControlsSink) {
+                        setControlsVisible(false)
                         true
                     } else {
                         false

@@ -10,7 +10,6 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import androidx.activity.viewModels
-import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.ui.base.BaseActivity
 import com.github.libretube.ui.interfaces.PlayerGestureOptions
 import com.github.libretube.ui.models.CommonPlayerViewModel
@@ -31,11 +30,6 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
     private var isFullscreen = false
     private var scaleGestureWasInProgress = false
     private var isMoving = false
-
-    // PrimeTube: remember the gesture axis so that a vertical swipe that drifts
-    // horizontally (or vice versa) never switches the gesture type mid-way
-    private var horizontalGesture = false
-
     var longPressInProgress = false
     var lastDoublePressTime: Instant? = null
 
@@ -55,7 +49,6 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 scaleGestureWasInProgress = false
-                horizontalGesture = false
 
                 val (_, height) = listener.getViewMeasures()
                 if (event.y < height * 0.1f && orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -95,7 +88,6 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                 if (isMoving) listener.onSwipeEnd()
                 isMoving = false
-                horizontalGesture = false
 
                 if (longPressInProgress) listener.onLongPressEnd()
                 longPressInProgress = false
@@ -214,75 +206,38 @@ class PlayerGestureController(activity: BaseActivity, private val listener: Play
             val insideBorder =
                 (e1.x < BORDER_THRESHOLD || e1.y < BORDER_THRESHOLD || e1.x > width - BORDER_THRESHOLD || e1.y > height - BORDER_THRESHOLD)
 
-            if (!isMoving) {
-                // PrimeTube: lock the gesture axis to the first significant movement.
-                // A STRONGLY dominant horizontal movement switches videos (in
-                // fullscreen), everything else keeps the vertical
-                // brightness/volume/minimize behavior. The 1.3x factor prevents
-                // a slightly diagonal vertical swipe from being hijacked by the
-                // video-switch gesture - which is exactly why brightness/volume
-                // often refused to start.
-                val horizontalDominant = abs(e2.x - e1.x) > abs(e2.y - e1.y) * 1.3f &&
-                    abs(e2.x - e1.x) > MOVEMENT_THRESHOLD
-                if (horizontalDominant) {
-                    if (isFullscreen &&
-                        !longPressInProgress &&
-                        !scaleGestureWasInProgress &&
-                        PlayerHelper.swipeVideoSwitchEnabled
-                    ) {
-                        isMoving = true
-                        horizontalGesture = true
-                        listener.onSwipeHorizontalScreen((e1.x - e2.x) / width)
-                        return true
-                    }
-                    return false
-                }
-
-                if (insideThreshHold || insideBorder) {
-                    return false
-                }
-            }
-
-            if (horizontalGesture) {
-                listener.onSwipeHorizontalScreen((e1.x - e2.x) / width)
-                return true
+            // If the movement is inside threshold or scroll is horizontal then return false
+            if (!isMoving && (insideThreshHold || insideBorder || abs(distanceX) > abs(distanceY))) {
+                return false
             }
 
             isMoving = true
 
-            // PrimeTube: brightness (left third) and volume (right third)
-            // swipes now work in EVERY mode - they used to be gated behind
-            // fullscreen, which made them feel completely broken on the
-            // embedded player. The center area keeps the upstream behavior:
-            // in fullscreen it drives the fullscreen gesture animation, and in
-            // portrait an upward swipe still minimizes the player.
-            return when {
+            if (!isFullscreen && distanceY > 0) {
+                // Allow swipe up on the entire area if the player is not currently in fullscreen
+                listener.onSwipeCenterScreen(distanceY, e2.y)
+                return true
+            }
+
+            when {
                 e1.x < width * LEFT_AREA_VIEW_PERCENTAGE -> {
-                    listener.onSwipeLeftScreen(distanceY, e2.y)
-                    true
+                    if (isFullscreen) listener.onSwipeLeftScreen(distanceY, e2.y)
                 }
 
                 e1.x > width * RIGHT_AREA_VIEW_PERCENTAGE -> {
-                    listener.onSwipeRightScreen(distanceY, e2.y)
-                    true
+                    if (isFullscreen) listener.onSwipeRightScreen(distanceY, e2.y)
                 }
 
-                else -> {
-                    if (isFullscreen || distanceY > 0) {
-                        listener.onSwipeCenterScreen(distanceY, e2.y)
-                    }
-                    true
-                }
+                else -> listener.onSwipeCenterScreen(distanceY, e2.y)
             }
+
+            return true
         }
     }
 
     companion object {
         private const val MOVEMENT_THRESHOLD = 30
-        // PrimeTube: was 90 - swipes starting near the screen edges never
-        // started a gesture at all, which killed most brightness/volume
-        // swipes in fullscreen
-        private const val BORDER_THRESHOLD = 60
+        private const val BORDER_THRESHOLD = 90
         private const val LEFT_AREA_VIEW_PERCENTAGE = 0.35f
         private const val RIGHT_AREA_VIEW_PERCENTAGE = 0.65f
 

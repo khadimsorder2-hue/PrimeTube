@@ -140,35 +140,10 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"/>
 
-    <!-- PrimeTube: overlay shown while swiping horizontally to switch videos -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/video_switch_overlay"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:visibility="gone"
-        app:cardBackgroundColor="#AA000000"
-        app:cardCornerRadius="20dp"
-        app:cardElevation="0dp"
-        app:strokeWidth="0dp">
-
-        <TextView
-            android:id="@+id/video_switch_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:drawablePadding="8dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="10dp"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            tools:text="Play next"
-            tools:visibility="visible" />
-
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- PrimeTube: clean PiP controls - only a slim auto-hiding progress
-         slider, no buttons at all -->
+    <!-- PrimeTube: clean PiP controls - the progress bar is ALWAYS visible so
+         the user can drag-seek without ever tapping the window (tapping would
+         summon the system's PiP chrome). The only button is the headphone at
+         the very top-right corner for audio-only background play. -->
     <LinearLayout
         android:id="@+id/primePipProgressRoot"
         android:layout_width="match_parent"
@@ -178,16 +153,19 @@
         android:background="@drawable/prime_pip_progress_bg"
         android:gravity="center_vertical"
         android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="6dp"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="6dp"
         android:visibility="gone">
 
         <SeekBar
             android:id="@+id/primePipSeek"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="34dp"
             android:background="?attr/selectableItemBackground"
-            android:maxHeight="3dp"
+            android:maxHeight="4dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:progressTint="#FF0033"
             android:progressBackgroundTint="#59FFFFFF"
             android:splitTrack="false"

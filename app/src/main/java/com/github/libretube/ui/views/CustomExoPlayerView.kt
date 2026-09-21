@@ -24,7 +24,6 @@ import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.ScaleGestureDetector
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewParent
 import android.view.Window
@@ -33,7 +32,6 @@ import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.core.os.postDelayed
 import androidx.core.view.WindowInsetsCompat
@@ -105,7 +103,6 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.ceil
 
 @SuppressLint("ClickableViewAccessibility")
@@ -174,25 +171,11 @@ class CustomExoPlayerView(
      */
     private var rememberedPlaybackSpeed: Float? = null
 
-    /**
-     * PrimeTube: called when a horizontal swipe on the fullscreen player requested
-     * switching the video. The parameter is true when the next video was requested
-     * and false when the previous one was requested.
-     */
-    var onSwitchVideo: ((next: Boolean) -> Unit)? = null
-
-    // PrimeTube: state of an ongoing horizontal video switch gesture
-    private var videoSwitchInProgress = false
-    private var videoSwitchDistanceFraction = 0f
-
-    // PrimeTube: free-form subtitles - drag vertically, pinch to resize,
-    // double tap to reset. Offset/scale are persisted in the settings.
+    // PrimeTube: free-form subtitles - pinch to resize, double tap to reset.
+    // Offset/scale are persisted in the settings.
     private var subtitleOffsetFraction = PlayerHelper.primeSubtitleOffset
     private var subtitleTextScale = PlayerHelper.primeSubtitleScale
-    private var subtitleTouchActive = false
     private var subtitleGestureTaken = false
-    private var subtitleDragStartY = 0f
-    private var subtitleDragStartOffset = 0f
     private val subtitleScaleDetector = ScaleGestureDetector(
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -328,10 +311,6 @@ class CustomExoPlayerView(
      */
     var onPrimePipAudioClick: (() -> Unit)? = null
 
-    private val primePipHideRunnable = Runnable {
-        backgroundBinding.primePipProgressRoot.isGone = true
-    }
-
     private val primePipTicker = object : Runnable {
         override fun run() {
             if (primePipMode) {
@@ -358,13 +337,12 @@ class CustomExoPlayerView(
 
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {
                     primePipSeekDragging = true
-                    removeCallbacks(primePipHideRunnable)
                 }
 
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {
                     primePipSeekDragging = false
                     seekBar?.progress?.let { player?.seekTo(it.toLong()) }
-                    showPrimePipProgress()
+                    syncPrimePipProgress()
                 }
             }
         )
@@ -385,37 +363,21 @@ class CustomExoPlayerView(
                 setUseController(false)
                 hideController()
             }
-            showPrimePipProgress()
+            // PrimeTube: the progress bar is ALWAYS visible in PiP - the user
+            // can drag-seek without ever tapping the window (tapping would
+            // summon the system's PiP chrome with its close button)
+            syncPrimePipProgress()
+            backgroundBinding.primePipProgressRoot.isVisible = true
             // PrimeTube: the single small headphone button - audio-only background.
-            // ALWAYS visible so the user never needs to tap the window (tapping
-            // shows the system's own PiP menu, which Android 12+ decorates with
-            // its close/settings/fullscreen buttons that no app can remove)
+            // ALWAYS visible, flush at the very top-right corner.
             backgroundBinding.primePipAudioBtn.isVisible = true
             post(primePipTicker)
         } else {
             removeCallbacks(primePipTicker)
-            removeCallbacks(primePipHideRunnable)
             primePipSeekDragging = false
             backgroundBinding.primePipProgressRoot.isGone = true
             backgroundBinding.primePipAudioBtn.isGone = true
             runCatching { setUseController(true) }
-        }
-    }
-
-    private fun showPrimePipProgress() {
-        if (!primePipMode) return
-        syncPrimePipProgress()
-        backgroundBinding.primePipProgressRoot.isVisible = true
-        removeCallbacks(primePipHideRunnable)
-        postDelayed(primePipHideRunnable, PRIME_PIP_HIDE_DELAY_MS)
-    }
-
-    private fun togglePrimePipProgress() {
-        if (backgroundBinding.primePipProgressRoot.isVisible) {
-            backgroundBinding.primePipProgressRoot.isGone = true
-            removeCallbacks(primePipHideRunnable)
-        } else {
-            showPrimePipProgress()
         }
     }
 
@@ -1818,36 +1780,25 @@ class CustomExoPlayerView(
     }
 
     /**
-     * PrimeTube: free-form subtitle gestures. A touch that starts on the
-     * visible caption area can drag the subtitles vertically or pinch-resize
-     * them - but ONLY after the finger really moves. Plain taps are never
-     * consumed so the controls always open, even on top of the captions.
+     * PrimeTube: free-form subtitle gestures. ONLY a two-finger pinch on the
+     * visible caption area resizes the subtitles; every single-finger touch
+     * stays with the player gestures so brightness/volume always work.
      */
     private fun handleSubtitleTouch(event: MotionEvent): Boolean {
         val subtitleView = subtitleView ?: return false
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                subtitleTouchActive = false
-                subtitleGestureTaken = false
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount < 2) return false
                 if (subtitleView.childCount == 0 || subtitleView.visibility != View.VISIBLE) {
                     return false
                 }
                 val rect = RectF()
                 computeSubtitleBounds(rect)
-                rect.inset(-48f, -36f)
-                if (!rect.contains(event.x, event.y)) return false
+                if (!rect.contains(event.getX(0), event.getY(0))) return false
 
-                // PrimeTube: only arm the subtitle gesture here - the event is
-                // deliberately passed through so a tap still toggles controls
-                subtitleTouchActive = true
-                subtitleDragStartY = event.y
-                subtitleDragStartOffset = subtitleOffsetFraction
-                return false
-            }
-
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                if (!subtitleTouchActive || event.pointerCount < 2) return false
-                // pinch begins: take the gesture over from the tap detector
+                // PrimeTube: ONLY a two-finger pinch on the captions takes the
+                // gesture over from the player - single-finger touches always
+                // stay with the brightness/volume/fullscreen gestures.
                 sendCancelToGestureController(event)
                 subtitleGestureTaken = true
                 subtitleScaleDetector.onTouchEvent(event)
@@ -1855,39 +1806,14 @@ class CustomExoPlayerView(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (!subtitleTouchActive) return false
+                if (!subtitleGestureTaken) return false
                 subtitleScaleDetector.onTouchEvent(event)
-
-                if (!subtitleGestureTaken) {
-                    if (subtitleScaleDetector.isInProgress) {
-                        sendCancelToGestureController(event)
-                        subtitleGestureTaken = true
-                        return true
-                    }
-                    if (event.pointerCount != 1) return false
-                    val dyStart = event.y - subtitleDragStartY
-                    val slop = ViewConfiguration.get(context).scaledTouchSlop
-                    if (abs(dyStart) < slop) return false
-                    // the finger really moved: drag mode takes over, the tap
-                    // detector is cancelled so no swipe gesture fires
-                    sendCancelToGestureController(event)
-                    subtitleGestureTaken = true
-                }
-
-                if (subtitleScaleDetector.isInProgress) return true
-                if (event.pointerCount != 1) return true
-                val dy = event.y - subtitleDragStartY
-                val height = height.takeIf { it > 0 } ?: return true
-                subtitleOffsetFraction =
-                    (subtitleDragStartOffset + dy / height).coerceIn(-0.65f, 0.06f)
-                applySubtitleTransform()
                 return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val wasTaken = subtitleGestureTaken
                 subtitleScaleDetector.onTouchEvent(event)
-                subtitleTouchActive = false
                 subtitleGestureTaken = false
                 if (!wasTaken) return false
                 persistSubtitle()
@@ -2013,11 +1939,10 @@ class CustomExoPlayerView(
     }
 
     override fun onSingleTap(areControlsLocked: Boolean) {
-        // PrimeTube: in PiP mode the tap only toggles the slim progress slider
-        if (primePipMode) {
-            togglePrimePipProgress()
-            return
-        }
+        // PrimeTube: in PiP mode there is nothing to toggle - the progress bar
+        // and headphone button are always visible, and the tap only opens the
+        // SYSTEM PiP chrome (which no app can suppress)
+        if (primePipMode) return
         if (areControlsLocked) {
             // PrimeTube: locked - pulse the lock pill, never reveal the controls
             lockIndicator?.animate()
@@ -2073,51 +1998,9 @@ class CustomExoPlayerView(
     }
 
     override fun onSwipeEnd() {
-        // PrimeTube: finish an ongoing horizontal video switch gesture
-        if (videoSwitchInProgress) {
-            videoSwitchInProgress = false
-
-            val distanceFraction = videoSwitchDistanceFraction
-            videoSwitchDistanceFraction = 0f
-
-            backgroundBinding.videoSwitchOverlay.isGone = true
-
-            if (abs(distanceFraction) >= VIDEO_SWITCH_THRESHOLD_FRACTION) {
-                onSwitchVideo?.invoke(distanceFraction > 0)
-            }
-            return
-        }
-
         fullscreenGestureAnimationController.onSwipeEnd()
         gestureViewBinding.brightnessControlView.isGone = true
         gestureViewBinding.volumeControlView.isGone = true
-    }
-
-    /**
-     * PrimeTube: horizontal swipe on the fullscreen player surface - show the direction
-     * overlay while dragging and prepare the switch decision for [onSwipeEnd].
-     */
-    override fun onSwipeHorizontalScreen(distanceFraction: Float) {
-        videoSwitchInProgress = true
-        videoSwitchDistanceFraction = distanceFraction
-
-        val overlay = backgroundBinding.videoSwitchOverlay
-        val nextRequested = distanceFraction >= 0
-        (overlay.getChildAt(0) as? TextView)?.let { textView ->
-            textView.setText(
-                if (nextRequested) R.string.play_next else R.string.play_previous
-            )
-            // mirror the arrow direction depending on the swipe direction
-            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_next)
-            drawable?.setTint(Color.WHITE)
-            textView.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                if (nextRequested) null else drawable,
-                null,
-                if (nextRequested) drawable else null,
-                null
-            )
-        }
-        overlay.isVisible = true
     }
 
     override fun onZoom() {
@@ -2204,7 +2087,10 @@ class CustomExoPlayerView(
         if (event == null) return false
         if (!useController) return false
 
-        // PrimeTube: a touch on the visible captions moves/resizes them
+        // PrimeTube: a TWO-FINGER pinch on the visible captions resizes them.
+        // A single finger is ALWAYS left to the player gestures - the old
+        // single-finger subtitle drag used to swallow brightness/volume swipes
+        // that started over the caption area.
         if (handleSubtitleTouch(event)) return true
 
         return playerGestureController.onTouchEvent(event)
@@ -2341,19 +2227,12 @@ class CustomExoPlayerView(
         /** PrimeTube: handler token of the A-B repeat polling loop. */
         private const val AB_REPEAT_TOKEN = "primeAbRepeat"
 
-        /** PrimeTube: the PiP progress slider auto-hides after this long. */
-        private const val PRIME_PIP_HIDE_DELAY_MS = 2_500L
-
         private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.158f
 
         /** PrimeTube: default subtitle position - hugging the very bottom. */
         private const val SUBTITLE_BOTTOM_FRACTION = 0.012f
         private const val ANIMATION_DURATION = 100L
         private const val AUTO_HIDE_CONTROLLER_DELAY = 2000L
-
-        // PrimeTube: fraction of the player width the finger has to travel before
-        // releasing a horizontal swipe switches to the next/previous video
-        private const val VIDEO_SWITCH_THRESHOLD_FRACTION = 0.25f
         private val LANDSCAPE_MARGIN_HORIZONTAL = 20f.dpToPx()
         private val LANDSCAPE_MARGIN_HORIZONTAL_NONE = 0f.dpToPx()
     }
