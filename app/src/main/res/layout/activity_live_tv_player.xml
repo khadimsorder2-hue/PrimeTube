@@ -263,6 +263,23 @@
         android:visibility="gone"
         tools:text="Brightness 50%" />
 
+    <!-- PrimeTube: Live TV PiP headphone - the ONLY in-window button while in
+         picture-in-picture. Tapping it leaves the PiP window and keeps the
+         channel's AUDIO playing in the background (video track disabled). -->
+    <ImageView
+        android:id="@+id/livePipAudioBtn"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/prime_chip_bg"
+        android:contentDescription="@string/prime_pip_audio_bg"
+        android:padding="8dp"
+        android:src="@drawable/ic_headphones"
+        android:visibility="gone"
+        app:tint="@android:color/white" />
+
     <!-- PrimeTube: channels side panel (transparent, close button) -->
     <FrameLayout
         android:id="@+id/liveQueueRoot"

@@ -3,7 +3,6 @@ package com.github.libretube.ui.fragments
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Dialog
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -40,8 +39,6 @@ import androidx.constraintlayout.motion.widget.MotionLayout
 import androidx.constraintlayout.motion.widget.TransitionAdapter
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
-import androidx.core.app.RemoteActionCompat
-import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.net.toUri
 import androidx.core.os.bundleOf
@@ -142,10 +139,6 @@ import kotlin.io.path.exists
 import kotlin.math.abs
 import kotlin.math.absoluteValue
 
-
-// PrimeTube: broadcast action fired by the PiP remote action button - the
-// system PiP chrome shows it right next to its close button
-private const val PRIME_PIP_AUDIO_ACTION = "com.github.libretube.prime.PIP_AUDIO"
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
@@ -252,17 +245,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
 
                 else -> Unit
             }
-        }
-    }
-
-    /**
-     * PrimeTube: receiver for the PiP remote action - the headphone button in
-     * the system PiP chrome (right next to the close button). Leaves the PiP
-     * window and keeps the audio playing in the background.
-     */
-    private val primePipAudioReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            exitPrimePipToAudioBackground()
         }
     }
 
@@ -532,14 +514,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             requireContext(),
             playerActionReceiver,
             IntentFilter(PlayerHelper.getIntentActionName(requireContext())),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-
-        // PrimeTube: receiver for the PiP headphone remote action
-        ContextCompat.registerReceiver(
-            requireContext(),
-            primePipAudioReceiver,
-            IntentFilter(PRIME_PIP_AUDIO_ACTION),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
     }
@@ -1514,11 +1488,6 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             context?.unregisterReceiver(playerActionReceiver)
         }
 
-        runCatching {
-            // PrimeTube: unregister the PiP headphone action receiver
-            context?.unregisterReceiver(primePipAudioReceiver)
-        }
-
         // restore the orientation that's used by the main activity
         baseActivity.requestOrientationChange()
 
@@ -1932,6 +1901,10 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+        // PrimeTube: PiP transitions can arrive while the view is already torn
+        // down (rapid home-swipes, backgrounded fragments) - every access is
+        // guarded so the transition itself can never crash the app
+        if (_binding == null) return
         if (isInPictureInPictureMode) {
             // hide and disable exoPlayer controls
             disableController()
@@ -2030,41 +2003,17 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
             val isPlaying = ::playerController.isInitialized && playerController.isPlaying
 
             PictureInPictureParamsCompat.Builder()
-                // PrimeTube: a CLEAN pip window - the video itself plus the slim
-                // auto-hiding progress slider only. The one remote action (the
-                // headphone) is rendered by the SYSTEM PiP chrome right next to
-                // its close button, replacing the plain settings chrome.
+                // PrimeTube: a CLEAN pip window. The headphone (background audio)
+                // button lives ON the window itself - always visible, in its own
+                // place, never merged into the system chrome row next to the
+                // close button. No app remote actions are registered.
                 .setAutoEnterEnabled(isPlaying)
-                .setActions(listOf(primePipAudioRemoteAction))
                 .apply {
                     if (isPlaying) {
                         setAspectRatio(playerController.videoSize)
                     }
                 }
                 .build()
-        }
-
-    /**
-     * PrimeTube: the headphone remote action for the system PiP chrome -
-     * tapping it fires [PRIME_PIP_AUDIO_ACTION] and the player hands the
-     * playback over to the audio background mode.
-     */
-    private val primePipAudioRemoteAction: RemoteActionCompat
-        get() {
-            val ctx = requireContext()
-            val pendingIntent = PendingIntent.getBroadcast(
-                ctx,
-                1001,
-                Intent(PRIME_PIP_AUDIO_ACTION).setPackage(ctx.packageName),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            val title = ctx.getString(R.string.prime_pip_audio_bg)
-            return RemoteActionCompat(
-                IconCompat.createWithResource(ctx, R.drawable.ic_headphones),
-                title,
-                title,
-                pendingIntent
-            )
         }
 
     /**

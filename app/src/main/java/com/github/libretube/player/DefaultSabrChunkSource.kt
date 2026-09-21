@@ -91,6 +91,11 @@ class DefaultSabrChunkSource(
 
     private val representationHolders: MutableList<RepresentationHolder>
 
+    // PrimeTube: kept as a field (renamed to avoid shadowing the constructor
+    // parameter) so the representation holders can be rebuilt when the user
+    // picks a different quality (updateTrackSelection)
+    private val primeExtractorFactory: ChunkExtractor.Factory
+
     private var fatalError: Exception? = null
     private var missingLastSegment = false
 
@@ -105,15 +110,26 @@ class DefaultSabrChunkSource(
      * @param playerId The [PlayerId] of the player using this chunk source.
      */
     init {
+        this.primeExtractorFactory = chunkExtractorFactory
+        representationHolders = buildRepresentationHolders(trackSelection).toMutableList()
+    }
+
+    /**
+     * PrimeTube: builds the representation holders in EXACT track-selection index
+     * order. The chunk source addresses holders by `trackSelection.selectedIndex`,
+     * so the holder list must always mirror the current selection - a mismatch
+     * made quality changes silently keep streaming the old format.
+     */
+    private fun buildRepresentationHolders(trackSelection: ExoTrackSelection): List<RepresentationHolder> {
         val representations =
             adaptationSetIndices.flatMap { manifest.adaptationSets[it].representations }
                 .filterNotNull().toList()
-        representationHolders = (0..<trackSelection.length()).map {
+        return (0..<trackSelection.length()).map {
             val representation = representations[trackSelection.getIndexInTrackGroup(it)]
             RepresentationHolder(
                 Util.msToUs(representation.stream.durationMs ?: manifest.durationMs),
                 representation,
-                chunkExtractorFactory.createProgressiveMediaExtractor(
+                primeExtractorFactory.createProgressiveMediaExtractor(
                     trackType,
                     representation.format,
                     false,
@@ -122,7 +138,7 @@ class DefaultSabrChunkSource(
                     playerId
                 ),
             )
-        }.toMutableList()
+        }
     }
 
     override fun getAdjustedSeekPositionUs(positionUs: Long, seekParameters: SeekParameters): Long {
@@ -149,7 +165,40 @@ class DefaultSabrChunkSource(
     }
 
     override fun updateTrackSelection(trackSelection: ExoTrackSelection?) {
-        this.trackSelection = trackSelection!!
+        // PrimeTube: THE quality-switch fix. The holders were built once from the
+        // INITIAL selection; when the track selector hands over a new selection
+        // (user picked 480p / 1080p / auto), the holder list MUST be rebuilt in
+        // the new selection's index order - otherwise `holders[selectedIndex]`
+        // still points at the old format and the SABR server keeps streaming the
+        // previous quality no matter what the user picks.
+        val newSelection = trackSelection!!
+        val representations =
+            adaptationSetIndices.flatMap { manifest.adaptationSets[it].representations }
+                .filterNotNull().toList()
+        val rebuilt = (0..<newSelection.length()).map { index ->
+            val representation = representations[newSelection.getIndexInTrackGroup(index)]
+            // reuse the already-prepared holder (and its extractor) when the
+            // same representation is part of the new selection again
+            representationHolders.firstOrNull { it.representation == representation }
+                ?: RepresentationHolder(
+                    Util.msToUs(representation.stream.durationMs ?: manifest.durationMs),
+                    representation,
+                    primeExtractorFactory.createProgressiveMediaExtractor(
+                        trackType,
+                        representation.format,
+                        false,
+                        emptyList(),
+                        null,
+                        playerId
+                    ),
+                )
+        }
+        // extractors of dropped representations are intentionally NOT released:
+        // a later selection (e.g. back to Auto) may need them again, and the
+        // bounded number of formats keeps the cost tiny
+        representationHolders.clear()
+        representationHolders.addAll(rebuilt)
+        this.trackSelection = newSelection
     }
 
     override fun maybeThrowError() {

@@ -378,8 +378,18 @@ class CustomExoPlayerView(
         if (primePipMode == enabled) return
         primePipMode = enabled
         if (enabled) {
+            // PrimeTube: belt & braces - make sure the regular controller can
+            // never leak into the PiP window (it carries the settings gear),
+            // even if the fragment's own disable call raced this one
+            runCatching {
+                setUseController(false)
+                hideController()
+            }
             showPrimePipProgress()
-            // PrimeTube: the single small headphone button - audio-only background
+            // PrimeTube: the single small headphone button - audio-only background.
+            // ALWAYS visible so the user never needs to tap the window (tapping
+            // shows the system's own PiP menu, which Android 12+ decorates with
+            // its close/settings/fullscreen buttons that no app can remove)
             backgroundBinding.primePipAudioBtn.isVisible = true
             post(primePipTicker)
         } else {
@@ -388,6 +398,7 @@ class CustomExoPlayerView(
             primePipSeekDragging = false
             backgroundBinding.primePipProgressRoot.isGone = true
             backgroundBinding.primePipAudioBtn.isGone = true
+            runCatching { setUseController(true) }
         }
     }
 

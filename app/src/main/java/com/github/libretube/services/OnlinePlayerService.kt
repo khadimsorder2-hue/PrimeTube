@@ -95,6 +95,17 @@ open class OnlinePlayerService : AbstractPlayerService() {
     private var sourceErrorRecovery = false
 
     /**
+     * PrimeTube: root-level "source error" prevention - when one playback pipeline
+     * keeps failing, the recovery switches to a DIFFERENT pipeline instead of
+     * retrying the same one forever:
+     * 0 = automatic (SABR for regular videos, HLS for live),
+     * 1 = plain DASH manifest (SABR skipped),
+     * 2 = direct HLS playlist.
+     * A successful READY state resets this back to automatic.
+     */
+    private var primeSourceEscalation = 0
+
+    /**
      * PrimeTube: buffering watchdog - a video stuck in STATE_BUFFERING for too
      * long is brought back to life instead of freezing forever: first a light
      * re-buffer at the current position, then a full stream re-fetch (the
@@ -125,11 +136,16 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
                         bufferRecoveries <= 4 -> {
                             // hard recovery: fetch fresh stream URLs, same as the
-                            // source-error path - expired links are often the cause
+                            // source-error path - expired links are often the cause.
+                            // PrimeTube: the player must ONLY be touched on the main
+                            // thread - this runnable runs on the main handler, but the
+                            // coroutine below runs on Dispatchers.IO, so the final
+                            // play() is posted back through the main handler.
                             toastFromMainThread(getString(R.string.prime_source_retry))
                             sourceErrorRetries = 0
                             sourceErrorRecovery = true
                             isPrimeRecovering = true
+                            escalateSourcePipeline()
                             val resumePosition = p.currentPosition.takeIf { it > 0 } ?: 0L
                             scope.launch {
                                 delay(600L)
@@ -138,7 +154,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
                                     startTimestampSeconds =
                                         (resumePosition / 1000L).takeIf { it > 0 }
                                     startPlayback()
-                                    exoPlayer?.play()
+                                    handler.post { exoPlayer?.play() }
                                 }
                             }
                         }
@@ -182,6 +198,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     isPrimeRecovering = false
                     bufferStuckSince = -1L
                     bufferRecoveries = 0
+                    // PrimeTube: playback works again - the automatic pipeline
+                    // (SABR first) gets its chance back on the next video
+                    primeSourceEscalation = 0
                     // save video to watch history when the video starts playing or is being resumed
                     // waiting for the player to be ready since the video can't be claimed to be watched
                     // while it did not yet start actually, but did buffer only so far
@@ -207,14 +226,19 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 isPrimeRecovering = true
                 val resumePosition = exoPlayer?.currentPosition?.takeIf { it > 0 } ?: 0L
                 toastFromMainThread(getString(R.string.prime_source_retry))
+                // PrimeTube: never retry the same broken pipeline - each error
+                // escalates to a different source type (SABR -> DASH -> HLS)
+                escalateSourcePipeline()
                 scope.launch {
                     delay(600L * sourceErrorRetries)
                     if (sourceErrorRecovery) {
                         isTransitioning = true
                         startTimestampSeconds = (resumePosition / 1000L).takeIf { it > 0 }
                         startPlayback()
-                        // PrimeTube: a recovered stream always continues playing
-                        exoPlayer?.play()
+                        // PrimeTube: a recovered stream always continues playing.
+                        // play() touches the player - it must run on the MAIN thread,
+                        // this coroutine runs on Dispatchers.IO
+                        handler.post { exoPlayer?.play() }
                     }
                 }
                 return
@@ -266,27 +290,59 @@ open class OnlinePlayerService : AbstractPlayerService() {
         // start loading the video info while keeping a reference to the job
         // so that it can be canceled once a different video is loaded
         fetchVideoInfoJob = scope.launch {
-            streams = withContext(Dispatchers.IO) {
-                val fetched = runCatching {
-                    MediaServiceRepository.instance.getStreams(videoId)
-                }.getOrElse { primaryError ->
-                    Log.e(TAG(), primaryError.stackTraceToString())
-
-                    // PrimeTube: age-restricted videos and blocked instances often work
-                    // through the other source (local extraction <-> Piped) - retry once
-                    val retried = MediaServiceRepository
-                        .getStreamsFromAlternativeSource(videoId)
-                    if (retried != null) {
-                        toastFromMainDispatcher(R.string.prime_source_fallback)
-                        retried
-                    } else {
-                        toastFromMainDispatcher(primeReadableStreamError(primaryError))
-                        return@withContext null
-                    }
+            // PrimeTube: the fetch itself is the #1 source of "source error" toast -
+            // flaky instances and rate limits. Instead of giving up after ONE round,
+            // retry the whole fetch (primary + alternative source) up to three times
+            // with a growing pause. The player stays alive the whole time.
+            var fetchError: Throwable? = null
+            val fetched = (1..PRIME_FETCH_ATTEMPTS).firstNotNullOfOrNull { attempt ->
+                if (attempt > 1) {
+                    toastFromMainThread(getString(R.string.prime_source_retry))
+                    delay(1200L * attempt)
                 }
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        MediaServiceRepository.instance.getStreams(videoId)
+                    }.getOrElse { primaryError ->
+                        Log.e(TAG(), primaryError.stackTraceToString())
 
-                DeArrowUtil.deArrowStreams(fetched, videoId)
-            } ?: return@launch
+                        // PrimeTube: age-restricted videos and blocked instances often work
+                        // through the other source (local extraction <-> Piped) - retry once
+                        runCatching {
+                            MediaServiceRepository.getStreamsFromAlternativeSource(videoId)
+                        }.getOrElse { alternativeError ->
+                            Log.e(TAG(), alternativeError.stackTraceToString())
+                            fetchError = if (alternativeError == primaryError) {
+                                primaryError
+                            } else {
+                                alternativeError
+                            }
+                            null
+                        }.also { retried ->
+                            if (retried != null) {
+                                toastFromMainDispatcher(R.string.prime_source_fallback)
+                            }
+                        }
+                    }
+                } ?: return@firstNotNullOfOrNull null
+
+                DeArrowUtil.deArrowStreams(result, videoId)
+            }
+
+            if (fetched == null) {
+                // PrimeTube: every attempt failed - never leave the player stuck in
+                // "transitioning" (that killed the whole screen before). Show the
+                // reason and stay alive so the user (or autoplay) can retry.
+                withContext(Dispatchers.Main) {
+                    isTransitioning = false
+                    toastFromMainThread(
+                        fetchError?.let { primeReadableStreamError(it) }
+                            ?: getString(R.string.prime_stream_failed)
+                    )
+                }
+                return@launch
+            }
+            streams = fetched
 
             // PrimeTube: if the instance only offers streams below 1440p, fetch YouTube's
             // official DASH manifest as a higher-quality (1440p/2160p) fallback source.
@@ -329,6 +385,16 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 getString(R.string.prime_age_restricted)
             else -> getString(R.string.prime_stream_failed)
         }
+    }
+
+    /**
+     * PrimeTube: move one step up the playback-pipeline ladder. A pipeline that
+     * just threw is never retried as-is - the next recovery attempt uses a
+     * DIFFERENT source type, which is what actually rescues the video when one
+     * extraction path (e.g. SABR) is broken for a particular video or instance.
+     */
+    private fun escalateSourcePipeline() {
+        if (primeSourceEscalation < 2) primeSourceEscalation++
     }
 
     private fun configurePlayer(seekToPositionMs: Long) {
@@ -435,9 +501,14 @@ open class OnlinePlayerService : AbstractPlayerService() {
         val streams = streams ?: return
 
         when {
-            // SABR
+            // SABR - only in the automatic pipeline (escalation 0). When SABR
+            // playback failed once, recovery escalates and rebuilds the source
+            // from a plain DASH manifest instead.
             // skip SABR for livestreams, as the player impl has no support for it
-            !streams.isLive && streams.serverAbrStreamingUrl != null && streams.videoPlaybackUstreamerConfig != null -> {
+            primeSourceEscalation == 0 &&
+                !streams.isLive &&
+                streams.serverAbrStreamingUrl != null &&
+                streams.videoPlaybackUstreamerConfig != null -> {
                 val sabrMediaSourceFactory = SabrMediaSource.Factory(
                     SabrManifest(videoId, streams)
                 )
@@ -517,8 +588,11 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 val mediaItem = createMediaItem(dashUri, MimeTypes.APPLICATION_MPD, streams)
                 exoPlayer?.setMediaItem(mediaItem)
             }
-            // DASH (regular videos)
-            streams.videoStreams.any { it.url?.startsWith("sabr://") != true } -> {
+            // DASH (regular videos) - the escalated pipeline (level 1+) uses DASH.
+            // At escalation level 2 the DASH branch is skipped when an HLS playlist
+            // exists, so the direct-HLS pipeline gets its turn below.
+            (primeSourceEscalation < 2 || streams.hls == null) &&
+                streams.videoStreams.any { it.url?.startsWith("sabr://") != true } -> {
                 // PrimeTube 4K BOOST: if the instance caps the streams below 1440p, use the
                 // official YT DASH manifest (with proxied URLs) so that 1440p/2160p can play.
                 val dashUri = officialDashManifest?.toDashDataUri()
@@ -576,6 +650,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
 /** PrimeTube: how many times a playback error triggers a full stream re-fetch. */
 private const val SOURCE_ERROR_MAX_RETRIES = 2
+
+/** PrimeTube: how many rounds the stream-info fetch itself retries (primary + alternative source per round). */
+private const val PRIME_FETCH_ATTEMPTS = 3
 
 /** PrimeTube: buffering watchdog tuning - 15s stuck, checked every 2s. */
 private const val BUFFER_STUCK_MS = 15_000L
