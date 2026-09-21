@@ -46,6 +46,7 @@ import com.github.libretube.enums.PlayerEvent
 import com.github.libretube.enums.SbSkipOptions
 import com.github.libretube.extensions.TAG
 import com.github.libretube.extensions.parcelableExtra
+import com.github.libretube.extensions.seekBy
 import com.github.libretube.extensions.toastFromMainThread
 import com.github.libretube.extensions.updateParameters
 import com.github.libretube.helpers.PlayerHelper
@@ -405,8 +406,8 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
                     if (player.isPlaying) player.pause() else player.play()
                 }
             }
-            PRIME_PIP_SEEK_BACK -> runCatching { exoPlayer?.seekBack(10_000) }
-            PRIME_PIP_SEEK_FORWARD -> runCatching { exoPlayer?.seekForward(10_000) }
+            PRIME_PIP_SEEK_BACK -> runCatching { exoPlayer?.seekBy(-10_000) }
+            PRIME_PIP_SEEK_FORWARD -> runCatching { exoPlayer?.seekBy(10_000) }
         }
         return super.onStartCommand(intent, flags, startId)
     }
