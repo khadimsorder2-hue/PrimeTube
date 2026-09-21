@@ -95,6 +95,16 @@ object ImageHelper {
     }
 
     /**
+     * PrimeTube: low-RAM safety valve, called from [LibreTubeApp.onTrimMemory].
+     * Hands the in-memory bitmap cache back to the system as soon as it is
+     * running low, so the app survives instead of being killed mid-video or
+     * mid-download. Disk caches are kept - only RAM is released.
+     */
+    fun trimMemoryCaches() {
+        runCatching { imageLoader.memoryCache?.clear() }
+    }
+
+    /**
      * Checks if the corresponding image for the given key (e.g. a url) is cached.
      * PrimeTube: uses our own PrimeImageStore instead of coil's DiskLruCache -
      * plain file existence check, cannot throw.

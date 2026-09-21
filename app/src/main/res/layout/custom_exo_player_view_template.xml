@@ -142,63 +142,73 @@
 
     <!-- PrimeTube: clean PiP controls - the progress bar is ALWAYS visible so
          the user can drag-seek without ever tapping the window (tapping would
-         summon the system's PiP chrome). The only button is the headphone at
-         the very top-right corner for audio-only background play. -->
+         summon the system's PiP chrome). Everything lives in ONE slim bottom
+         bar: the slider on the left and the ONLY button - the headphone for
+         audio-only background play - at the VERY BOTTOM-RIGHT corner, so it
+         can never overlap the system's close (X) button at the top. -->
     <LinearLayout
-        android:id="@+id/primePipProgressRoot"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:alpha="0.92"
-        android:background="@drawable/prime_pip_progress_bg"
-        android:gravity="center_vertical"
-        android:orientation="vertical"
-        android:paddingHorizontal="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="6dp"
-        android:visibility="gone">
+        android:orientation="horizontal">
 
-        <SeekBar
-            android:id="@+id/primePipSeek"
-            android:layout_width="match_parent"
-            android:layout_height="34dp"
-            android:background="?attr/selectableItemBackground"
-            android:maxHeight="4dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:progressTint="#FF0033"
-            android:progressBackgroundTint="#59FFFFFF"
-            android:splitTrack="false"
-            android:thumbOffset="2dp"
-            android:thumbTint="#FF0033" />
-
-        <TextView
-            android:id="@+id/primePipTime"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/primePipProgressRoot"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:shadowColor="#B3000000"
-            android:shadowRadius="4"
-            android:textColor="#D9FFFFFF"
-            android:textSize="10sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+            android:layout_weight="1"
+            android:alpha="0.92"
+            android:background="@drawable/prime_pip_progress_bg"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="6dp"
+            android:visibility="gone">
 
-    <!-- PrimeTube: the ONLY button in PiP - a small headphone that leaves
-         the PiP window and keeps the audio playing in the background.
-         It sits FLUSH at the very top-right corner of the PiP window. -->
-    <ImageView
-        android:id="@+id/primePipAudioBtn"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="0dp"
-        android:layout_marginEnd="0dp"
-        android:background="@drawable/prime_chip_bg"
-        android:contentDescription="@string/prime_pip_audio_bg"
-        android:padding="8dp"
-        android:src="@drawable/ic_headphones"
-        android:visibility="gone"
-        app:tint="@android:color/white" />
+            <SeekBar
+                android:id="@+id/primePipSeek"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:background="?attr/selectableItemBackground"
+                android:maxHeight="4dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:progressTint="#FF0033"
+                android:progressBackgroundTint="#59FFFFFF"
+                android:splitTrack="false"
+                android:thumbOffset="2dp"
+                android:thumbTint="#FF0033" />
+
+            <TextView
+                android:id="@+id/primePipTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:shadowColor="#B3000000"
+                android:shadowRadius="4"
+                android:textColor="#D9FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- PrimeTube: the ONLY button in PiP - a small headphone that leaves
+             the PiP window and keeps the audio playing in the background.
+             It sits at the very BOTTOM-RIGHT corner of the PiP window. -->
+        <ImageView
+            android:id="@+id/primePipAudioBtn"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="6dp"
+            android:layout_marginBottom="6dp"
+            android:background="@drawable/prime_chip_bg"
+            android:contentDescription="@string/prime_pip_audio_bg"
+            android:padding="8dp"
+            android:src="@drawable/ic_headphones"
+            android:visibility="gone"
+            app:tint="@android:color/white" />
+    </LinearLayout>
 
 </merge>

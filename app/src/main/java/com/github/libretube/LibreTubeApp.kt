@@ -1,6 +1,7 @@
 package com.github.libretube
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -65,6 +66,20 @@ class LibreTubeApp : Application() {
         ShortcutHelper.createShortcuts(this)
 
         NewPipeExtractorInstance.init()
+    }
+
+    /**
+     * PrimeTube: low-RAM optimisation - when the system announces memory
+     * pressure while the app is in the foreground, release the in-memory
+     * image cache immediately so the OS never needs to kill the process
+     * (which would also stop video playback and active downloads).
+     * Bitmaps are simply re-decoded from disk/network when needed again.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            ImageHelper.trimMemoryCaches()
+        }
     }
 
     /**

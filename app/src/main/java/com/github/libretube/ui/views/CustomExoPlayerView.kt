@@ -299,8 +299,9 @@ class CustomExoPlayerView(
     private var noFullscreenResolution: Int? = null
 
     /**
-     * PrimeTube: PiP slider wiring - a clean PiP window shows no buttons at
-     * all, just a slim auto-hiding progress slider that can also seek.
+     * PrimeTube: PiP controls wiring - a slim always-visible bottom bar with
+     * a drag-seek slider plus ONE small headphone button at the very
+     * bottom-right corner (clear of the system's close button at the top).
      */
     private var primePipMode = false
     private var primePipSeekDragging = false
@@ -369,7 +370,8 @@ class CustomExoPlayerView(
             syncPrimePipProgress()
             backgroundBinding.primePipProgressRoot.isVisible = true
             // PrimeTube: the single small headphone button - audio-only background.
-            // ALWAYS visible, flush at the very top-right corner.
+            // ALWAYS visible, at the very bottom-right corner (never overlaps
+            // the system's PiP close button, which sits at the top).
             backgroundBinding.primePipAudioBtn.isVisible = true
             post(primePipTicker)
         } else {
