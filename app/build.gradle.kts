@@ -34,7 +34,7 @@ android {
         applicationId = "com.github.libretube"
         minSdk = 26
         targetSdk = 36
-        versionCode = 78
+        versionCode = 79
         // PrimeTube: CI injects the real build version (e.g. "32.1-build18")
         // so the in-app updater can compare against the release tag
         versionName = System.getenv("PRIMETUBE_VERSION") ?: "32.1"

@@ -222,6 +222,10 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
                     }
                     if (!hasExact) primeOnQualityEscalationNeeded(resolution)
                 }
+                // PrimeTube: some sources (e.g. SABR) ADVERTISE every quality
+                // in their track list but quietly keep delivering a lower one.
+                // A short verification pass catches that case and escalates.
+                primeOnQualitySelected(resolution)
             }
 
             args.containsKey(PlayerCommand.SET_CAPTION_TRACK.name) -> {
@@ -406,8 +410,10 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
                     if (player.isPlaying) player.pause() else player.play()
                 }
             }
-            PRIME_PIP_SEEK_BACK -> runCatching { exoPlayer?.seekBy(-10_000) }
-            PRIME_PIP_SEEK_FORWARD -> runCatching { exoPlayer?.seekBy(10_000) }
+            // PrimeTube: the PiP menu is now prev / play-pause / next - the
+            // 10s seek buttons are gone, the middle row jumps the queue
+            PRIME_PIP_NEXT -> runCatching { handlePlayerAction(PlayerEvent.Next) }
+            PRIME_PIP_PREV -> runCatching { handlePlayerAction(PlayerEvent.Prev) }
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -419,6 +425,13 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
      * track selection parameters so the chosen quality actually plays.
      */
     open fun primeOnQualityEscalationNeeded(@Suppress("UNUSED_PARAMETER") requestedHeight: Int) = Unit
+
+    /**
+     * PrimeTube: the user picked a video quality. Subclasses may verify a
+     * moment later that the picked height is actually being delivered and
+     * escalate if it is not.
+     */
+    open fun primeOnQualitySelected(@Suppress("UNUSED_PARAMETER") requestedHeight: Int) = Unit
 
     private fun promiseForeground() {
         runCatching {
@@ -759,8 +772,8 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
         // PrimeTube: PiP remote actions (system PiP menu buttons)
         const val PRIME_PIP_PLAY_PAUSE = "com.github.libretube.action.PRIME_PIP_PLAY_PAUSE"
-        const val PRIME_PIP_SEEK_BACK = "com.github.libretube.action.PRIME_PIP_SEEK_BACK"
-        const val PRIME_PIP_SEEK_FORWARD = "com.github.libretube.action.PRIME_PIP_SEEK_FORWARD"
+        const val PRIME_PIP_NEXT = "com.github.libretube.action.PRIME_PIP_NEXT"
+        const val PRIME_PIP_PREV = "com.github.libretube.action.PRIME_PIP_PREV"
 
         private const val PRIME_PLAYER_ACTION =
             "com.github.libretube.services.AbstractPlayerService.FOREGROUND_ACTION"

@@ -2019,7 +2019,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
     }
 
     /**
-     * PrimeTube: PiP remote actions (back 10s / play-pause / forward 10s).
+     * PrimeTube: PiP remote actions (previous / play-pause / next).
      * They fire the player service directly - the service owns the player,
      * so this works no matter which screen the task is on.
      */
@@ -2043,10 +2043,10 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
 
         return listOf(
             pipAction(
-                R.drawable.ic_rewind,
-                R.string.prime_pip_rewind,
+                R.drawable.ic_prev,
+                R.string.play_previous,
                 101,
-                AbstractPlayerService.PRIME_PIP_SEEK_BACK
+                AbstractPlayerService.PRIME_PIP_PREV
             ),
             pipAction(
                 if (isPlaying) R.drawable.ic_pause_filled else R.drawable.ic_play_filled,
@@ -2055,10 +2055,10 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback,
                 AbstractPlayerService.PRIME_PIP_PLAY_PAUSE
             ),
             pipAction(
-                R.drawable.ic_forward,
-                R.string.prime_pip_forward,
+                R.drawable.ic_next,
+                R.string.play_next,
                 103,
-                AbstractPlayerService.PRIME_PIP_SEEK_FORWARD
+                AbstractPlayerService.PRIME_PIP_NEXT
             )
         )
     }

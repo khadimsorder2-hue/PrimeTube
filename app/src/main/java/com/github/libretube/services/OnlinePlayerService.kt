@@ -106,6 +106,19 @@ open class OnlinePlayerService : AbstractPlayerService() {
     private var primeSourceEscalation = 0
 
     /**
+     * PrimeTube: quality-pick verification. Some sources (SABR) advertise
+     * every quality in their track list but quietly keep delivering a lower
+     * rendition. After the user picks a quality, a short delayed check makes
+     * sure the picked height is REALLY playing - and escalates the source
+     * (official DASH) when it is not.
+     */
+    private var primeRequestedQualityHeight: Int? = null
+    private var primeQualityVerifyTask: Runnable? = null
+    private var primeQualityVerifyAttempts = 0
+    private var primeQualityEscalatedFor: Pair<String, Int>? = null
+    private var primeQualityEscalatedAt = 0L
+
+    /**
      * PrimeTube: buffering watchdog - a video stuck in STATE_BUFFERING for too
      * long is brought back to life instead of freezing forever: first a light
      * re-buffer at the current position, then a full stream re-fetch (the
@@ -201,6 +214,23 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     // PrimeTube: playback works again - the automatic pipeline
                     // (SABR first) gets its chance back on the next video
                     primeSourceEscalation = 0
+                    // PrimeTube: black-screen rescue - if the user picked a
+                    // quality and NO video track got selected at all (e.g. the
+                    // device cannot decode 4K), relax the exact-height demand
+                    // so the closest playable quality BELOW the pick plays
+                    // instead of a black screen
+                    val requested = primeRequestedQualityHeight
+                    if (requested != null &&
+                        exoPlayer?.videoSize?.height == 0 &&
+                        trackSelector?.parameters
+                            ?.isTrackTypeDisabled(C.TRACK_TYPE_VIDEO) == false
+                    ) {
+                        trackSelector?.updateParameters {
+                            setMinVideoSize(Int.MIN_VALUE, 0)
+                            setMaxVideoSize(Int.MAX_VALUE, requested)
+                        }
+                        primeRequestedQualityHeight = null
+                    }
                     // save video to watch history when the video starts playing or is being resumed
                     // waiting for the player to be ready since the video can't be claimed to be watched
                     // while it did not yet start actually, but did buffer only so far
@@ -398,21 +428,33 @@ open class OnlinePlayerService : AbstractPlayerService() {
     }
 
     /**
-     * PrimeTube: the user picked a video quality the current source cannot
-     * provide (e.g. 1440p/2160p while playing from a capped pipeline). Move
-     * one step up the pipeline - level 1 uses the official DASH manifest,
-     * which carries EVERY adaptive format up to the video's exact maximum -
-     * and rebuild the source at the current position. The track selection
-     * parameters (min/max = the picked height) are already set, so as soon
-     * as the fuller source is ready the chosen quality actually plays.
+     * PrimeTube: the user picked a quality the loaded source cannot really
+     * deliver (e.g. 1440p/2160p while playing from a capped pipeline). Rebuild
+     * the source at DASH level - with the official DASH manifest fetched when
+     * needed, which carries EVERY adaptive format up to the video's exact
+     * maximum. The track selection parameters (min/max = the picked height)
+     * are already set, so as soon as the fuller source is ready the chosen
+     * quality actually plays.
      */
     override fun primeOnQualityEscalationNeeded(requestedHeight: Int) {
-        // only the automatic SABR pipeline (level 0) can be out-qualified -
-        // level 1/2 already play from the fullest DASH/HLS source available
         if (!isVideoIdReady() || isPrimeRecovering || isTransitioning) return
-        if (primeSourceEscalation != 0) return
+        // live streams cap at what their HLS/DASH source carries - there is
+        // no fuller source to escalate to
+        if (streams?.isLive == true) return
+        // one escalation attempt per (video, picked height) - the verification
+        // pass calls this again, this keeps it from looping; a NEW pick (or
+        // waiting a few seconds and re-picking) gets a fresh budget
+        val key = videoId to requestedHeight
+        val now = System.currentTimeMillis()
+        if (key == primeQualityEscalatedFor && now - primeQualityEscalatedAt < 15_000L) return
+        primeQualityEscalatedFor = key
+        primeQualityEscalatedAt = now
         runCatching {
-            escalateSourcePipeline()
+            // level 1 plays from the official DASH manifest (fetched when the
+            // instance's own streams cap below the picked height) - that
+            // manifest carries EVERY adaptive format up to the video's exact
+            // maximum, which is what actually makes 1440p/2160p playable
+            primeSourceEscalation = 1
             val resumePosition = exoPlayer?.currentPosition?.takeIf { it > 0 } ?: 0L
             sourceErrorRetries = 0
             sourceErrorRecovery = true
@@ -425,6 +467,67 @@ open class OnlinePlayerService : AbstractPlayerService() {
                 handler.post { exoPlayer?.play() }
             }
         }
+    }
+
+    /**
+     * PrimeTube: the user picked a quality - remember it and schedule the
+     * verification pass that confirms the picked height really plays.
+     */
+    override fun primeOnQualitySelected(requestedHeight: Int) {
+        primeQualityVerifyTask?.let { handler.removeCallbacks(it) }
+        primeQualityVerifyTask = null
+        if (requestedHeight == Int.MAX_VALUE || requestedHeight <= 0) {
+            primeRequestedQualityHeight = null
+            return
+        }
+        primeRequestedQualityHeight = requestedHeight
+        primeQualityVerifyAttempts = 0
+        primeScheduleQualityVerification()
+    }
+
+    /**
+     * PrimeTube: delayed check - is the picked quality actually playing?
+     * SABR advertises every format in its track list but can quietly keep
+     * streaming a lower one; without this check the quality picker looks
+     * broken and the summary keeps saying "limited".
+     */
+    private fun primeScheduleQualityVerification() {
+        val task = Runnable {
+            primeQualityVerifyTask = null
+            val requested = primeRequestedQualityHeight ?: return@Runnable
+            val exo = exoPlayer ?: return@Runnable
+            // a rebuild is already running - check again once it settles
+            if (isTransitioning || isPrimeRecovering) {
+                primeRetryQualityVerification()
+                return@Runnable
+            }
+            // audio-only mode has no video track by design - nothing to verify
+            val videoDisabled = trackSelector?.parameters
+                ?.isTrackTypeDisabled(C.TRACK_TYPE_VIDEO) == true
+            if (videoDisabled) {
+                primeRequestedQualityHeight = null
+                return@Runnable
+            }
+            val currentHeight = exo.videoSize.height
+            if (currentHeight >= requested) {
+                // the picked quality is actually playing - all good
+                primeRequestedQualityHeight = null
+                return@Runnable
+            }
+            // the loaded source advertised the quality but does not deliver
+            // it (or no video track got selected at all) - rebuild from the
+            // fullest source; the dedupe inside keeps this from looping
+            primeOnQualityEscalationNeeded(requested)
+            primeRetryQualityVerification()
+        }
+        primeQualityVerifyTask = task
+        handler.postDelayed(task, 4500L)
+    }
+
+    private fun primeRetryQualityVerification() {
+        if (primeQualityVerifyAttempts >= 3) return
+        primeQualityVerifyAttempts++
+        primeScheduleQualityVerification()
     }
 
     private fun configurePlayer(seekToPositionMs: Long) {
@@ -476,6 +579,11 @@ open class OnlinePlayerService : AbstractPlayerService() {
     override fun navigateVideo(videoId: String) {
         this.streams = null
         this.officialDashManifest = null
+        // PrimeTube: fresh video - drop the quality-pick verification state
+        primeQualityVerifyTask?.let { handler.removeCallbacks(it) }
+        primeQualityVerifyTask = null
+        primeRequestedQualityHeight = null
+        primeQualityEscalatedFor = null
 
         super.navigateVideo(videoId)
     }
@@ -491,6 +599,12 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
         val maxVideoOnlyHeight = streams.videoStreams
             .filter { it.videoOnly == true }
+            // PrimeTube: "sabr://" entries are PLACEHOLDERS the SABR pipeline
+            // fills in on demand - they are not real fetchable streams.
+            // Counting their advertised heights made the instance look 4K
+            // capable and skipped the official DASH manifest, so 1440p/2160p
+            // could never actually play.
+            .filter { it.url?.startsWith("sabr://") != true }
             .maxOfOrNull { it.height ?: 0 } ?: 0
         if (maxVideoOnlyHeight >= 1440) return null
 
