@@ -24,6 +24,7 @@ import com.github.libretube.api.MediaServiceRepository
 import com.github.libretube.api.SubscriptionHelper
 import com.github.libretube.api.obj.Segment
 import com.github.libretube.api.obj.Streams
+import com.github.libretube.api.obj.Subtitle
 import com.github.libretube.constants.IntentData
 import com.github.libretube.db.DatabaseHelper
 import com.github.libretube.extensions.TAG
@@ -247,6 +248,14 @@ open class OnlinePlayerService : AbstractPlayerService() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // PrimeTube: live streams fall behind the live window after long stalls
+            // (or backgrounded playback) - the only cure is rejoining the live edge;
+            // a plain retry would keep failing against the same expired window.
+            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                exoPlayer?.seekToDefaultPosition()
+                exoPlayer?.prepare()
+                return
+            }
             // PrimeTube: auto-recover from "source error" - expired stream URLs are
             // the usual culprit. Re-fetch the streams and resume where it stopped.
             if (sourceErrorRetries < SOURCE_ERROR_MAX_RETRIES && isVideoIdReady()) {
@@ -697,7 +706,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     } catch (e: Exception) {
                         Log.w(this::class.simpleName, "failed to set subtitle lazy-loading: ${e.stackTrace}")
                     }
-                    progressiveMediaSourceFactory.createMediaSource(MediaItem.fromUri(it.url!!))
+                    progressiveMediaSourceFactory.createMediaSource(
+                        MediaItem.fromUri(it.primeBanglaCaptionUri())
+                    )
                 }.toList()
 
                 exoPlayer?.setMediaSource(MergingMediaSource(*mediaSources.toTypedArray()))
@@ -772,9 +783,21 @@ open class OnlinePlayerService : AbstractPlayerService() {
         }
     }
 
+    /**
+     * PrimeTube: every non-Bengali caption track is auto-translated to Bangla.
+     * Appending YouTube's own tlang=bn parameter to the timedtext URL makes the
+     * server translate the cues on the fly, so ANY subtitle renders in Bangla.
+     * Native Bangla tracks pass through untouched.
+     */
+    private fun Subtitle.primeBanglaCaptionUri(): Uri {
+        val base = url.orEmpty().toUri()
+        if (code?.lowercase()?.startsWith("bn") == true) return base
+        return base.buildUpon().appendQueryParameter("tlang", "bn").build()
+    }
+
     private fun getSubtitleConfigs(): List<SubtitleConfiguration> = streams?.subtitles?.map {
         val roleFlags = getSubtitleRoleFlags(it)
-        SubtitleConfiguration.Builder(it.url!!.toUri())
+        SubtitleConfiguration.Builder(it.primeBanglaCaptionUri())
             .setRoleFlags(roleFlags)
             .setLanguage(it.code)
             .setMimeType(it.mimeType).build()

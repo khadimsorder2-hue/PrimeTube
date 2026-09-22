@@ -310,6 +310,14 @@ class LiveTVPlayerActivity : AppCompatActivity() {
                 text = error.errorCodeName
                 isVisible = true
             }
+            // PrimeTube: the live window moved past the player (long buffering or
+            // backgrounded playback) - rejoining the live edge is the only cure;
+            // counting this as a channel failure would skip perfectly good channels.
+            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                player?.seekToDefaultPosition()
+                player?.prepare()
+                return
+            }
             // PrimeTube: many IPTV servers label their streams wrongly (HLS with
             // no .m3u8 extension or the other way around) - TV boxes are much
             // stricter about this than phones. Retry once with the other

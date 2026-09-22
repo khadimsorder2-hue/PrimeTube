@@ -70,7 +70,14 @@ object PlayerHelper {
     // PrimeTube: trimmed buffer durations to keep the player's RAM footprint small
     private const val LOW_RAM_MAX_BUFFER_DURATION = 1000 * 20
     private const val LOW_RAM_BACK_BUFFER_DURATION = 1000 * 10
-    private const val DEFAULT_BACK_BUFFER_DURATION = 1000 * 30
+    private const val DEFAULT_BACK_BUFFER_DURATION = 1000 * 10
+
+    // PrimeTube: instant-start buffering - playback may begin after only 500ms
+    // of media and resume 1.5s after a rebuffer, instead of the stock 2.5s/5s.
+    // The forward buffer is capped at 40s so long sessions stop hoarding RAM.
+    private const val MAX_FORWARD_BUFFER_DURATION = 1000 * 40
+    private const val BUFFER_FOR_PLAYBACK_MS = 500
+    private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 1500
     const val WATCH_POSITION_TIMER_DELAY_MS = 1000L
 
     /**
@@ -557,8 +564,9 @@ object PlayerHelper {
 
         val forwardBufferDuration = if (lowRam) {
             min(bufferingGoal, LOW_RAM_MAX_BUFFER_DURATION)
+                .coerceAtLeast(MINIMUM_BUFFER_DURATION)
         } else {
-            max(bufferingGoal, MINIMUM_BUFFER_DURATION)
+            bufferingGoal.coerceIn(MINIMUM_BUFFER_DURATION, MAX_FORWARD_BUFFER_DURATION)
         }
 
         val backBufferDuration = if (lowRam) {
@@ -572,8 +580,8 @@ object PlayerHelper {
             .setBufferDurationsMs(
                 MINIMUM_BUFFER_DURATION,
                 forwardBufferDuration,
-                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                BUFFER_FOR_PLAYBACK_MS,
+                BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
             )
             // prefer starting playback sooner over filling the whole buffer
             .setPrioritizeTimeOverSizeThresholds(true)
