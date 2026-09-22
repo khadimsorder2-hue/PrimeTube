@@ -12,6 +12,13 @@ sealed class DownloadProgressResult {
     object Failed: DownloadProgressResult()
 
     /**
+     * PrimeTube: the server answered HTTP 403 - the stream URL expired.
+     * Retrying the same URL can never succeed; fresh stream info must be
+     * fetched and the provider rebuilt (the file keeps its byte offset).
+     */
+    object UrlExpired: DownloadProgressResult()
+
+    /**
      * Successfully downloaded an additional chunk of data of size [bytes].
      */
     class Progressed(val bytes: Long): DownloadProgressResult()

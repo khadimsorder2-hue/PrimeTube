@@ -104,6 +104,9 @@ class DownloadService : LifecycleService() {
      * Maps all currently running downloads to `true`, and all paused or stopped downloads to `false`.
      */
     private val downloadQueue = SparseBooleanArray()
+
+    // PrimeTube: registerNetworkChangedCallback is guarded against double-registration
+    private var networkCallbackRegistered = false
     private val _downloadFlow = MutableSharedFlow<Pair<Int, DownloadStatus>>()
     val downloadFlow: SharedFlow<Pair<Int, DownloadStatus>> = _downloadFlow
 
@@ -123,6 +126,10 @@ class DownloadService : LifecycleService() {
      * Listen for network changes and pause the download if the network connection becomes metered
      */
     fun registerNetworkChangedCallback() {
+        // PrimeTube: onStartCommand runs for every download action - register the
+        // callback only once or the callbacks pile up over a long session
+        if (networkCallbackRegistered) return
+        networkCallbackRegistered = true
         val connectivityManager = getSystemService<ConnectivityManager>()
         connectivityManager?.registerDefaultNetworkCallback(object :
             ConnectivityManager.NetworkCallback() {
@@ -134,6 +141,10 @@ class DownloadService : LifecycleService() {
                     for (download in downloadQueue.keyIterator()) {
                         pause(download)
                     }
+                } else {
+                    // PrimeTube: the network came back (WiFi blip, airplane mode
+                    // off) - stalled downloads come back to life on their own
+                    resumeAll()
                 }
             }
         })
@@ -169,9 +180,12 @@ class DownloadService : LifecycleService() {
         return START_NOT_STICKY
     }
 
-    private suspend fun loadStreamsInfo(videoId: String): Streams? {
-        if (cachedStreamsInfo.contains(videoId))
+    private suspend fun loadStreamsInfo(videoId: String, forceRefresh: Boolean = false): Streams? {
+        // PrimeTube: a forced refresh bypasses the cache - stream URLs expire
+        // after a few hours and stale entries would keep serving dead 403 URLs
+        if (!forceRefresh && cachedStreamsInfo.contains(videoId)) {
             return cachedStreamsInfo[videoId]
+        }
 
         val streams = try {
             withContext(Dispatchers.IO) {
@@ -280,58 +294,69 @@ class DownloadService : LifecycleService() {
         )
         speedCalculators[item.id] = PrimeSpeedCalculator()
 
-        val streams = loadStreamsInfo(item.videoId)
-        if (streams == null) {
+        val build = buildDownloadProvider(item, forceRefresh = false)
+        val provider = build.provider
+        if (provider == null) {
             // PrimeTube: the queue row must not hang forever when the video
             // info cannot even be fetched
-            markTrackerFinished(item, false, "stream error")
+            markTrackerFinished(item, false, build.error ?: "stream error")
             speedCalculators.remove(item.id)
             return
         }
+        downloadFile(item, provider)
+    }
+
+    /** PrimeTube: provider build outcome - a ready provider or the reason it failed. */
+    private class ProviderBuild(val provider: DownloadProvider?, val error: String? = null)
+
+    /**
+     * PrimeTube: fetch the stream info (optionally bypassing the stale cache)
+     * and select the download provider for the given item. Kept separate from
+     * the download loop so it can be re-run with FRESH URLs when the server
+     * starts answering 403 (expired stream URLs).
+     */
+    private suspend fun buildDownloadProvider(item: DownloadItem, forceRefresh: Boolean): ProviderBuild {
+        val streams = loadStreamsInfo(item.videoId, forceRefresh)
+            ?: return ProviderBuild(null, "stream error")
         if (item.type == FileType.SUBTITLE) {
             // subtitles are always plain files and don't use SABR
             val subtitle = streams.subtitles.firstOrNull { it.code == item.language }
-            if (subtitle == null) {
-                markTrackerFinished(item, false, "subtitle missing")
-                speedCalculators.remove(item.id)
-                return
+                ?: return ProviderBuild(null, "subtitle missing")
+            return ProviderBuild(RawByteStreamDownloadProvider(subtitle.url!!.toHttpUrl()))
+        }
+        val selectedStream = selectMatchingStream(streams, item)
+        if (selectedStream == null) {
+            // PrimeTube: exact quality match failed - fall back to the
+            // closest lower/equal quality instead of silently dying
+            val fallback = when (item.type) {
+                FileType.AUDIO -> streams.audioStreams
+                    .maxByOrNull { it.bitrate ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0 }
+                FileType.VIDEO -> streams.videoStreams
+                    .filter { !it.url.isNullOrEmpty() || (it.itag != null && it.lastModified != null) }
+                    .filter {
+                        (it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0) <=
+                            (item.quality?.filter(Char::isDigit)?.toIntOrNull() ?: Int.MAX_VALUE)
+                    }
+                    .maxByOrNull { it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0 }
+                else -> null
             }
-            downloadFile(item, RawByteStreamDownloadProvider(subtitle.url!!.toHttpUrl()))
-        } else {
-            val selectedStream = selectMatchingStream(streams, item)
-            if (selectedStream == null) {
-                // PrimeTube: exact quality match failed - fall back to the
-                // closest lower/equal quality instead of silently dying
-                val fallback = when (item.type) {
-                    FileType.AUDIO -> streams.audioStreams
-                        .maxByOrNull { it.bitrate ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0 }
-                    FileType.VIDEO -> streams.videoStreams
-                        .filter { !it.url.isNullOrEmpty() || (it.itag != null && it.lastModified != null) }
-                        .filter {
-                            (it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0) <=
-                                (item.quality?.filter(Char::isDigit)?.toIntOrNull() ?: Int.MAX_VALUE)
-                        }
-                        .maxByOrNull { it.height ?: it.quality?.filter(Char::isDigit)?.toIntOrNull() ?: 0 }
-                    else -> null
-                }
-                if (fallback == null) {
-                    markTrackerFinished(item, false, "quality not available")
-                    speedCalculators.remove(item.id)
-                    return
-                }
-                if (fallback.url?.startsWith("http") == true) {
-                    downloadFile(item, RawByteStreamDownloadProvider(fallback.url!!.toHttpUrl()))
-                    return
-                }
-                downloadFile(item, SabrDownloadProvider(item, streams, fallback))
-                return
-            }
-            if (selectedStream.url?.startsWith("http") == true) {
-                downloadFile(item, RawByteStreamDownloadProvider(selectedStream.url!!.toHttpUrl()))
+                ?: return ProviderBuild(null, "quality not available")
+            return if (fallback.url?.startsWith("http") == true) {
+                ProviderBuild(RawByteStreamDownloadProvider(fallback.url!!.toHttpUrl()))
             } else {
-                val sabrDownloader = SabrDownloadProvider(item, streams, selectedStream)
-                downloadFile(item, sabrDownloader)
+                // PrimeTube: a broken SABR init must end as a reported error,
+                // not as a stuck "downloading" row
+                val sabr = runCatching { SabrDownloadProvider(item, streams, fallback) }
+                    .getOrElse { return ProviderBuild(null, "sabr init failed") }
+                ProviderBuild(sabr)
             }
+        }
+        return if (selectedStream.url?.startsWith("http") == true) {
+            ProviderBuild(RawByteStreamDownloadProvider(selectedStream.url!!.toHttpUrl()))
+        } else {
+            val sabr = runCatching { SabrDownloadProvider(item, streams, selectedStream) }
+                .getOrElse { return ProviderBuild(null, "sabr init failed") }
+            ProviderBuild(sabr)
         }
     }
 
@@ -351,9 +376,15 @@ class DownloadService : LifecycleService() {
         val sink = item.path.sink(StandardOpenOption.APPEND).buffer()
         var totalRead = item.path.fileSize()
         var numberOfTries = 0
+        // PrimeTube: separate recovery budgets - expired URLs need a fresh
+        // stream-info fetch, transient failures need backoff, unexpected
+        // exceptions need their own small retry pool
+        var urlRefreshes = 0
+        var exceptionTries = 0
+        var provider = downloadProvider
         while (downloadQueue[item.id] && !item.isFinished) {
             try {
-                when (val result = downloadProvider.downloadNextChunk(item, sink)) {
+                when (val result = provider.downloadNextChunk(item, sink)) {
                     DownloadProgressResult.DownloadComplete -> {
                         setPauseNotification(notificationBuilder, item, true)
                         _downloadFlow.emit(item.id to DownloadStatus.Completed)
@@ -362,10 +393,32 @@ class DownloadService : LifecycleService() {
                         speedCalculators.remove(item.id)
                         break
                     }
+                    DownloadProgressResult.UrlExpired -> {
+                        // PrimeTube: the stream URL expired (HTTP 403) - refetch
+                        // fresh stream info and rebuild the provider; the file
+                        // resumes at its byte offset (raw) / stored position (SABR)
+                        if (urlRefreshes < MAX_URL_REFRESHES && downloadQueue[item.id]) {
+                            urlRefreshes++
+                            delay(minOf(1_000L * urlRefreshes, 5_000L))
+                            val fresh = buildDownloadProvider(item, forceRefresh = true).provider
+                            if (fresh != null) {
+                                provider = fresh
+                            } else {
+                                setPauseNotification(notificationBuilder, item, false)
+                                pause(item.id)
+                                break
+                            }
+                        } else {
+                            setPauseNotification(notificationBuilder, item, false)
+                            pause(item.id)
+                            break
+                        }
+                    }
                     DownloadProgressResult.Failed -> {
                         if (numberOfTries < MAX_SEGMENT_RETRIES) {
-                            // try to download segment again after a short delay
-                            delay(200)
+                            // PrimeTube: exponential backoff - hammering the
+                            // server every 200ms never healed a network blip
+                            delay(minOf(500L shl numberOfTries, 8_000L))
                             numberOfTries++
                         } else {
                             setPauseNotification(notificationBuilder, item, false)
@@ -389,6 +442,14 @@ class DownloadService : LifecycleService() {
             } catch (_: CancellationException) {
                 break
             } catch (e: Exception) {
+                // PrimeTube: one socket reset must not kill the whole download -
+                // unexpected exceptions get a small retry budget of their own
+                if (exceptionTries < MAX_EXCEPTION_RETRIES && downloadQueue[item.id]) {
+                    exceptionTries++
+                    runCatching { sink.flush() }
+                    delay(1_000L * exceptionTries)
+                    continue
+                }
                 toastFromMainThread("${getString(R.string.download)}: ${e.message}")
                 Log.e(this@DownloadService::class.java.name, e.stackTraceToString())
                 _downloadFlow.emit(item.id to DownloadStatus.Error(e.message.toString(), e))
@@ -806,7 +867,13 @@ class DownloadService : LifecycleService() {
         const val ACTION_RESUME_ALL =
             "com.github.libretube.services.DownloadService.ACTION_RESUME_ALL"
 
-        private const val MAX_SEGMENT_RETRIES = 3
+        private const val MAX_SEGMENT_RETRIES = 6
+
+        // PrimeTube: recovery budgets - expired stream URLs (403) are refetched
+        // up to five times, unexpected exceptions retry three times before the
+        // download is reported as failed
+        private const val MAX_URL_REFRESHES = 5
+        private const val MAX_EXCEPTION_RETRIES = 3
         var IS_DOWNLOAD_RUNNING = false
     }
 }

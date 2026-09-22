@@ -514,6 +514,15 @@ class StorageDownloadService : android.app.Service() {
                             delay(RETRY_DELAY_MS)
                         }
 
+                        DownloadProgressResult.UrlExpired -> {
+                            // PrimeTube: the URL expired (HTTP 403) - retrying the
+                            // same URL is pointless. Fail fast so the caller can
+                            // fall back to the SABR provider, which negotiates
+                            // completely fresh stream URLs on its own.
+                            sink.flush()
+                            return false
+                        }
+
                         is DownloadProgressResult.Progressed -> {
                             retries = 0
                             totalRead += result.bytes

@@ -34,10 +34,17 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
         sink: BufferedSink,
     ): DownloadProgressResult {
         val startByteOffset = item.path.fileSize()
-        val source =
-            startConnection(url, startByteOffset, item.downloadSize) ?: return DownloadProgressResult.Failed
+        // PrimeTube: HTTP 403 must be reported separately - the URL expired and
+        // only a fresh stream-info fetch can heal it (plain retries never will)
+        val connection = startConnection(url, startByteOffset, item.downloadSize)
+        val responseBody = connection.body
+            ?: return if (connection.urlExpired) {
+                DownloadProgressResult.UrlExpired
+            } else {
+                DownloadProgressResult.Failed
+            }
 
-        val sourceByte = source.byteStream().source()
+        val sourceByte = responseBody.byteStream().source()
 
         var totalRead = 0L
         var lastRead = 0L
@@ -52,7 +59,7 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
 
         withContext(Dispatchers.IO) {
             sourceByte.close()
-            source.close()
+            responseBody.close()
         }
 
         return if (startByteOffset + totalRead < item.downloadSize) {
@@ -62,11 +69,14 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
         }
     }
 
+    /** PrimeTube: connection attempt outcome - body or the reason it failed. */
+    private class ConnectionResult(val body: ResponseBody?, val urlExpired: Boolean = false)
+
     private suspend fun startConnection(
         url: HttpUrl,
         alreadyRead: Long,
         readLimit: Long?
-    ): ResponseBody? {
+    ): ConnectionResult {
         val limit = readLimit?.takeIf { it > 0 }?.let {
             min(readLimit, alreadyRead + BYTES_PER_REQUEST)
         }?.toString().orEmpty()
@@ -84,20 +94,22 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
                 val response = call.execute()
 
                 if (response.code == 403) {
+                    val errorBody = response.body.string()
                     response.close()
-                    Log.e(TAG(), "Got HTTP 403 while downloading: ${response.body.string()}")
-                    return@withContext null
+                    Log.e(TAG(), "Got HTTP 403 while downloading: $errorBody")
+                    // PrimeTube: signal the expired-URL state to the service
+                    return@withContext ConnectionResult(body = null, urlExpired = true)
                 } else if (response.code !in 200..299) {
                     response.close()
-                    return@withContext null // TODO: print response.message
+                    return@withContext ConnectionResult(body = null) // TODO: print response.message
                 }
 
-                return@withContext response.body
+                return@withContext ConnectionResult(body = response.body)
             } catch (e: IOException) {
                 Log.e(this.javaClass.name, e.printStackTrace().toString())
                 // TODO: forward error message
 
-                return@withContext null
+                return@withContext ConnectionResult(body = null)
             }
         }
     }
