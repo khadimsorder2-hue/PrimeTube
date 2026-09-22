@@ -35,6 +35,7 @@ import com.github.libretube.extensions.toastFromMainThread
 import com.github.libretube.extensions.updateParameters
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PlayerHelper.getSubtitleRoleFlags
+import com.github.libretube.helpers.PrimeStreamCache
 import com.github.libretube.helpers.ProxyHelper
 import com.github.libretube.parcelable.PlayerData
 import com.github.libretube.player.SabrMediaSource
@@ -85,6 +86,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
     Current job that's loading a new video (the value is null if no video is loading at the moment).
      */
     private var fetchVideoInfoJob: Job? = null
+
+    // PrimeTube: background preload of the next queue item's stream info
+    private var primePreloadJob: Job? = null
 
     /**
      * PrimeTube: "source error" recovery - stream URLs (proxied googlevideo links)
@@ -215,6 +219,9 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     // PrimeTube: playback works again - the automatic pipeline
                     // (SABR first) gets its chance back on the next video
                     primeSourceEscalation = 0
+                    // PrimeTube: preload the stream info of the next queue video
+                    // so the next switch starts without a loading round-trip
+                    primePreloadNext()
                     // PrimeTube: black-screen rescue - if the user picked a
                     // quality and NO video track got selected at all (e.g. the
                     // device cannot decode 4K), relax the exact-height demand
@@ -339,7 +346,10 @@ open class OnlinePlayerService : AbstractPlayerService() {
                     delay(1200L * attempt)
                 }
                 val result = withContext(Dispatchers.IO) {
-                    runCatching {
+                    // PrimeTube: the next video of the queue is preloaded in the
+                    // background - an instant cache hit here makes switching
+                    // videos (next/prev/autoplay/audio mode) start immediately
+                    PrimeStreamCache.get(videoId) ?: runCatching {
                         MediaServiceRepository.instance.getStreams(videoId)
                     }.getOrElse { primaryError ->
                         Log.e(TAG(), primaryError.stackTraceToString())
@@ -382,6 +392,10 @@ open class OnlinePlayerService : AbstractPlayerService() {
             }
             streams = fetched
 
+            // PrimeTube: remember this video's stream info so a quick back/forth
+            // switch never has to re-fetch it
+            PrimeStreamCache.put(videoId, fetched)
+
             // PrimeTube: if the instance only offers streams below 1440p, fetch YouTube's
             // official DASH manifest as a higher-quality (1440p/2160p) fallback source.
             officialDashManifest = streams?.let { fetchOfficialDashManifestIfNeeded(it) }
@@ -411,6 +425,31 @@ open class OnlinePlayerService : AbstractPlayerService() {
 
         fetchVideoInfoJob?.join()
         fetchVideoInfoJob = null
+    }
+
+    /**
+     * PrimeTube: preload the stream info of the next video in the queue in the
+     * background, so the actual switch (autoplay/next/prev/audio mode) only
+     * needs the short media-segment buffering instead of a full extraction
+     * round-trip. Live streams and shorts are skipped - they always need a
+     * fresh playback session anyway.
+     */
+    private fun primePreloadNext() {
+        primePreloadJob?.cancel()
+        val nextId = PlayingQueue.getNext() ?: return
+        if (PrimeStreamCache.get(nextId) != null) return
+
+        val nextIndex = PlayingQueue.currentIndex() + 1
+        val nextItem = PlayingQueue.getStreams().getOrNull(nextIndex)
+        if (nextItem?.isLive == true) return
+
+        primePreloadJob = scope.launch(Dispatchers.IO) {
+            runCatching {
+                PrimeStreamCache.put(nextId, MediaServiceRepository.instance.getStreams(nextId))
+            }.onFailure {
+                Log.i(TAG(), "preload of next video failed: ${it.message}")
+            }
+        }
     }
 
     /**
