@@ -702,6 +702,9 @@
     <string name="prime_login_err_network">Can\'t reach the instance. Check your internet, or choose another instance in Settings → Instance.</string>
     <string name="prime_login_via_instance">Signed in via %1$s - the app switched to that instance automatically, since your account lives there.\n[বাংলা: %1$s দিয়ে লগইন হয়েছে — অ্যাকাউন্ট ওই ইনস্ট্যান্সে থাকায় অ্যাপ স্বয়ংক্রিয়ভাবে সেখানে স্যুইচ করেছে]</string>
 
+    <!-- PrimeTube audio player -->
+    <string name="prime_queue_shuffled">Upcoming queue shuffled\n[বাংলা: বাকি সারি এলোমেলো করা হয়েছে]</string>
+
     <!-- PrimeTube Live TV playlist sources -->
     <string name="prime_close">Close</string>
     <string name="prime_add">Add</string>

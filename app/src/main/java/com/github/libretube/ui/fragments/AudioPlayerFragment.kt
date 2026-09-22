@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.format.DateUtils
 import android.view.View
+import android.widget.Toast
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.motion.widget.MotionLayout
@@ -178,6 +179,34 @@ class AudioPlayerFragment : Fragment(R.layout.fragment_audio_player), AudioPlaye
                     .show(childFragmentManager)
             }
         }
+
+        // PrimeTube: quick shuffle of the upcoming queue (same behavior as the
+        // queue sheet's shuffle entry) - one tap, no deep navigation
+        binding.shuffleQueue.setOnClickListener {
+            val currentIndex = PlayingQueue.currentIndex()
+            val streams = PlayingQueue.getStreams()
+            if (streams.size <= 1) return@setOnClickListener
+
+            val upcoming = streams.filterIndexed { index, _ -> index > currentIndex }
+            if (upcoming.isEmpty()) return@setOnClickListener
+
+            PlayingQueue.setStreams(
+                streams.filter { it !in upcoming }.plus(upcoming.shuffled())
+            )
+            Toast.makeText(context, R.string.prime_queue_shuffled, Toast.LENGTH_SHORT).show()
+        }
+
+        // PrimeTube: quick repeat-mode toggle (off -> all -> one -> off),
+        // kept in sync with the queue sheet via the shared PlayingQueue state
+        binding.repeatMode.setOnClickListener {
+            PlayingQueue.repeatMode = when (PlayingQueue.repeatMode) {
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+            updateRepeatButton()
+        }
+        updateRepeatButton()
 
         binding.sleepTimer.setOnClickListener {
             SleepTimerSheet().show(childFragmentManager)
@@ -437,6 +466,23 @@ class AudioPlayerFragment : Fragment(R.layout.fragment_audio_player), AudioPlaye
             binding.playPause.setIconResource(iconRes)
             binding.miniPlayerPause.setImageResource(iconRes)
         }
+    }
+
+    /**
+     * PrimeTube: reflect the current repeat mode on the audio player's
+     * repeat button (icon + dimmed state for off)
+     */
+    private fun updateRepeatButton() {
+        val binding = _binding ?: return
+        binding.repeatMode.alpha =
+            if (PlayingQueue.repeatMode == Player.REPEAT_MODE_OFF) 0.5f else 1f
+        binding.repeatMode.setIconResource(
+            if (PlayingQueue.repeatMode == Player.REPEAT_MODE_ONE) {
+                R.drawable.ic_repeat_one
+            } else {
+                R.drawable.ic_repeat
+            }
+        )
     }
 
     private fun handleServiceConnection() {

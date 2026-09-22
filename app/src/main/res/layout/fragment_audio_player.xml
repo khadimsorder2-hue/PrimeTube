@@ -251,6 +251,22 @@
                 android:gravity="center_horizontal"
                 android:layout_gravity="start|center_vertical">
 
+                <!-- PrimeTube: quick shuffle for the upcoming queue -->
+                <com.google.android.material.button.MaterialButton
+                    style="?materialIconButtonOutlinedStyle"
+                    android:id="@+id/shuffle_queue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ic_shuffle" />
+
+                <!-- PrimeTube: quick repeat-mode toggle (off / all / one) -->
+                <com.google.android.material.button.MaterialButton
+                    style="?materialIconButtonOutlinedStyle"
+                    android:id="@+id/repeat_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ic_repeat" />
+
                 <com.google.android.material.button.MaterialButton
                     style="?materialIconButtonOutlinedStyle"
                     android:id="@+id/open_queue"
