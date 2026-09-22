@@ -16,6 +16,7 @@ import com.github.libretube.api.RetrofitInstance
 import com.github.libretube.api.obj.Login
 import com.github.libretube.api.obj.Token
 import com.github.libretube.constants.IntentData
+import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.databinding.DialogLoginBinding
 import com.github.libretube.extensions.TAG
 import com.github.libretube.extensions.toastFromMainDispatcher
@@ -25,13 +26,23 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import retrofit2.HttpException
-import java.net.ConnectException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import javax.net.ssl.SSLException
 
 class LoginDialog : DialogFragment() {
+
+    companion object {
+        // PrimeTube: instances that were tested alive. When the selected instance
+        // cannot be reached at all (dead instance, DNS/SSL/timeout, HTTP 5xx like
+        // the old kavin.rocks default), sign-in and registration automatically
+        // retry these mirrors instead of failing. Wrong credentials (HTTP 4xx)
+        // are NOT retried elsewhere, since an account lives on exactly ONE
+        // instance - a 401 on a mirror just means the account is not there.
+        private val PRIME_FALLBACK_AUTH_URLS = listOf(
+            "https://api.piped.private.coffee"
+        )
+    }
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val binding = DialogLoginBinding.inflate(layoutInflater)
 
@@ -88,69 +99,95 @@ class LoginDialog : DialogFragment() {
     private fun signIn(username: String, password: String, createNewAccount: Boolean = false) {
         val login = Login(username, password)
         lifecycleScope.launch(Dispatchers.IO) {
-            val response = try {
-                if (createNewAccount) {
-                    RetrofitInstance.authApi.register(login)
-                } else {
-                    RetrofitInstance.authApi.login(login)
+            // PrimeTube: try the selected instance first; if it is completely
+            // unreachable, transparently retry the known-alive mirror instances.
+            val selectedUrl = RetrofitInstance.authUrl
+            val urlsToTry =
+                listOf(selectedUrl) + PRIME_FALLBACK_AUTH_URLS.filter { it != selectedUrl }
+
+            for (apiUrl in urlsToTry) {
+                val response = try {
+                    val api = RetrofitInstance.buildRetrofitInstance<PipedAuthApi>(apiUrl)
+                    if (createNewAccount) api.register(login) else api.login(login)
+                } catch (e: HttpException) {
+                    if (e.code() >= 500) {
+                        // PrimeTube: server-side failure (dead/blocked instance) -
+                        // fall through to the next mirror instead of giving up
+                        Log.e(TAG(), "instance $apiUrl unreachable: ${e.code()}")
+                        continue
+                    }
+                    val serverError = e.response()?.errorBody()?.string()?.runCatching {
+                        JsonHelper.json.decodeFromString<Token>(this).error
+                    }?.getOrNull()
+
+                    // PrimeTube: map raw server errors to messages the user can act on
+                    val errorMessage = when {
+                        serverError == null -> context?.getString(R.string.server_error).orEmpty()
+                        serverError.contains("bot", ignoreCase = true) ||
+                            serverError.contains("confirm", ignoreCase = true) ->
+                            context?.getString(R.string.prime_login_err_blocked).orEmpty()
+                        e.code() == 401 || e.code() == 403 ||
+                            serverError.contains("wrong", ignoreCase = true) ||
+                            serverError.contains("password", ignoreCase = true) ||
+                            serverError.contains("username", ignoreCase = true) ->
+                            context?.getString(R.string.prime_login_err_credentials).orEmpty()
+                        else -> serverError
+                    }
+                    context?.toastFromMainDispatcher(errorMessage)
+                    return@launch
+                } catch (e: Exception) {
+                    // PrimeTube: network-level failure (DNS/SSL/timeout) - the
+                    // instance is down for us, try the next mirror
+                    Log.e(TAG(), "$apiUrl: $e")
+                    continue
                 }
-            } catch (e: HttpException) {
-                val serverError = e.response()?.errorBody()?.string()?.runCatching {
-                    JsonHelper.json.decodeFromString<Token>(this).error
-                }?.getOrNull()
 
-                // PrimeTube: map raw server errors to messages the user can act on
-                val errorMessage = when {
-                    serverError == null -> context?.getString(R.string.server_error).orEmpty()
-                    serverError.contains("bot", ignoreCase = true) ||
-                        serverError.contains("confirm", ignoreCase = true) ->
-                        context?.getString(R.string.prime_login_err_blocked).orEmpty()
-                    e.code() == 401 || e.code() == 403 ||
-                        serverError.contains("wrong", ignoreCase = true) ||
-                        serverError.contains("password", ignoreCase = true) ||
-                        serverError.contains("username", ignoreCase = true) ->
-                        context?.getString(R.string.prime_login_err_credentials).orEmpty()
-                    else -> serverError
+                if (response.error != null) {
+                    context?.toastFromMainDispatcher(response.error)
+                    return@launch
                 }
-                context?.toastFromMainDispatcher(errorMessage)
-                return@launch
-            } catch (e: Exception) {
-                Log.e(TAG(), e.toString())
-                // PrimeTube: network failures get a hint to try another instance
-                val errorMessage = when (e) {
-                    is UnknownHostException, is ConnectException,
-                    is SocketTimeoutException, is SSLException ->
-                        context?.getString(R.string.prime_login_err_network).orEmpty()
-                    else -> e.localizedMessage.orEmpty()
+                if (response.token == null) {
+                    // PrimeTube: never fail silently
+                    context?.toastFromMainDispatcher(R.string.server_error)
+                    return@launch
                 }
-                context?.toastFromMainDispatcher(errorMessage)
-                return@launch
-            }
 
-            if (response.error != null) {
-                context?.toastFromMainDispatcher(response.error)
-                return@launch
-            }
-            if (response.token == null) {
-                // PrimeTube: never fail silently
-                context?.toastFromMainDispatcher(R.string.server_error)
-                return@launch
-            }
+                // PrimeTube: success on a mirror - move the whole app to that
+                // instance, otherwise subscriptions and playlists would still
+                // point at the dead one
+                if (apiUrl != selectedUrl) {
+                    PreferenceHelper.putString(PreferenceKeys.FETCH_INSTANCE, apiUrl)
+                    if (PreferenceHelper.getBoolean(PreferenceKeys.AUTH_INSTANCE_TOGGLE, false)) {
+                        PreferenceHelper.putString(PreferenceKeys.AUTH_INSTANCE, apiUrl)
+                    }
+                    RetrofitInstance.apiLazyMgr.reset()
+                    context?.toastFromMainDispatcher(
+                        context?.getString(
+                            R.string.prime_login_via_instance,
+                            apiUrl.toHttpUrl().host
+                        ).orEmpty()
+                    )
+                }
 
-            context?.toastFromMainDispatcher(
-                if (createNewAccount) R.string.registered else R.string.loggedIn
-            )
-
-            PreferenceHelper.setToken(response.token)
-            PreferenceHelper.setUsername(login.username)
-
-            withContext(Dispatchers.Main) {
-                setFragmentResult(
-                    INSTANCE_DIALOG_REQUEST_KEY,
-                    bundleOf(IntentData.loginTask to true)
+                context?.toastFromMainDispatcher(
+                    if (createNewAccount) R.string.registered else R.string.loggedIn
                 )
+
+                PreferenceHelper.setToken(response.token)
+                PreferenceHelper.setUsername(login.username)
+
+                withContext(Dispatchers.Main) {
+                    setFragmentResult(
+                        INSTANCE_DIALOG_REQUEST_KEY,
+                        bundleOf(IntentData.loginTask to true)
+                    )
+                }
+                dialog?.dismiss()
+                return@launch
             }
-            dialog?.dismiss()
+
+            // PrimeTube: every instance failed on the network level
+            context?.toastFromMainDispatcher(R.string.prime_login_err_network)
         }
     }
 

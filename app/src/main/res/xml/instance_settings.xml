@@ -26,7 +26,7 @@
 
         <ListPreference
             android:icon="@drawable/ic_server"
-            app:defaultValue="https://pipedapi.kavin.rocks"
+            app:defaultValue="https://api.piped.private.coffee"
             app:key="selectInstance"
             android:dependency="full_local_mode"
             app:title="@string/instances" />
@@ -59,7 +59,7 @@
         <ListPreference
             android:dependency="auth_instance_toggle"
             android:icon="@drawable/ic_server"
-            app:defaultValue="https://pipedapi.kavin.rocks"
+            app:defaultValue="https://api.piped.private.coffee"
             app:key="selectAuthInstance"
             app:title="@string/auth_instances" />
 

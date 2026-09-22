@@ -11,7 +11,10 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.create
 
 object RetrofitInstance {
-    const val PIPED_API_URL = "https://pipedapi.kavin.rocks"
+    // PrimeTube: the old default (pipedapi.kavin.rocks) is dead (HTTP 525) which
+    // broke sign-in and registration for every fresh install. private.coffee is
+    // the most reliable public instance right now (auth + streams + feed tested).
+    const val PIPED_API_URL = "https://api.piped.private.coffee"
 
     val authUrl
         get() = if (
