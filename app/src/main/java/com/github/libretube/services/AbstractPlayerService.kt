@@ -613,7 +613,10 @@ abstract class AbstractPlayerService : MediaLibraryService(), MediaLibrarySessio
 
     @OptIn(UnstableApi::class)
     private fun createPlayerAndMediaSession() {
-        val trackSelector = DefaultTrackSelectorWithAudioQualitySupport(this)
+        val trackSelector = DefaultTrackSelectorWithAudioQualitySupport(
+            this,
+            PlayerHelper.primeAbrSelectionFactory
+        )
         this.trackSelector = trackSelector
 
         val player = PlayerHelper.createPlayer(this, trackSelector)

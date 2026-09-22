@@ -35,7 +35,10 @@ import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.text.TextRenderer
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.BandwidthMeter
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.ui.CaptionStyleCompat
 import com.github.libretube.LibreTubeApp
 import com.github.libretube.R
@@ -78,6 +81,49 @@ object PlayerHelper {
     private const val MAX_FORWARD_BUFFER_DURATION = 1000 * 40
     private const val BUFFER_FOR_PLAYBACK_MS = 500
     private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 1500
+
+    // PrimeTube: ReVanced-style adaptive streaming. A high initial bitrate
+    // estimate makes the FIRST video open in high quality immediately (stock
+    // ExoPlayer assumes a slow link and crawls up from 240p), the ABR durations
+    // make the quality climb to HD within seconds and only drop after 30s of
+    // sustained low bandwidth, and 85% of the measured bandwidth is used
+    // instead of the stock 70%.
+    private const val PRIME_INITIAL_BITRATE_ESTIMATE = 4_500_000
+    private const val PRIME_MAX_DURATION_FOR_QUALITY_DECREASE_MS = 30_000
+    private const val PRIME_MIN_DURATION_FOR_QUALITY_INCREASE_MS = 4_000
+    private const val PRIME_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS = 25_000
+    private const val PRIME_BANDWIDTH_FRACTION = 0.85f
+
+    /**
+     * PrimeTube: fast-reacting adaptive track selection shared by all players.
+     * The bandwidth meter itself flows in from [ExoPlayer.Builder.setBandwidthMeter].
+     */
+    @OptIn(UnstableApi::class)
+    val primeAbrSelectionFactory = AdaptiveTrackSelection.Factory(
+        PRIME_MAX_DURATION_FOR_QUALITY_DECREASE_MS,
+        PRIME_MIN_DURATION_FOR_QUALITY_INCREASE_MS,
+        PRIME_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS,
+        PRIME_BANDWIDTH_FRACTION
+    )
+
+    @Volatile
+    private var primeBandwidthMeter: DefaultBandwidthMeter? = null
+
+    /**
+     * PrimeTube: one shared bandwidth meter for every player in the process.
+     * The high initial estimate removes the "starts blurry then slowly climbs"
+     * effect, and sharing keeps network knowledge across players. The player
+     * attaches this meter's transfer listener to the data sources itself, so
+     * no extra wiring is needed.
+     */
+    @OptIn(UnstableApi::class)
+    fun getBandwidthMeter(context: Context): BandwidthMeter {
+        return primeBandwidthMeter ?: DefaultBandwidthMeter.Builder(context.applicationContext)
+            .setInitialBitrateEstimate(PRIME_INITIAL_BITRATE_ESTIMATE)
+            .build()
+            .also { primeBandwidthMeter = it }
+    }
+
     const val WATCH_POSITION_TIMER_DELAY_MS = 1000L
 
     /**
@@ -525,6 +571,10 @@ object PlayerHelper {
                 (out.last() as? TextRenderer)?.experimentalSetLegacyDecodingEnabled(true)
             }
         }
+        // PrimeTube: fall back to alternative software/hardware decoders when the
+        // primary one fails or stalls - prevents stuck frames on devices with
+        // buggy vendor codecs
+        renderersFactory.setEnableDecoderFallback(true)
         return renderersFactory
     }
     /**
@@ -546,6 +596,9 @@ object PlayerHelper {
             .setHandleAudioBecomingNoisy(true)
             .setLoadControl(getLoadControl())
             .setAudioAttributes(audioAttributes, true)
+            // PrimeTube: shared high-initial-estimate bandwidth meter feeds both
+            // the adaptive track selection and the player internals
+            .setBandwidthMeter(getBandwidthMeter(context))
             .build()
             .apply {
                 loadPlaybackParams()

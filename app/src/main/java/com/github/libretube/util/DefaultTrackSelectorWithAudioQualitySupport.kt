@@ -16,6 +16,12 @@ import com.github.libretube.helpers.PreferenceHelper
 class DefaultTrackSelectorWithAudioQualitySupport
     (context: Context) :
     DefaultTrackSelector(context) {
+
+    // PrimeTube: ReVanced-style fast-reacting adaptive track selection -
+    // the bandwidth meter is supplied by ExoPlayer.Builder.setBandwidthMeter
+    constructor(context: Context, trackSelectionFactory: ExoTrackSelection.Factory) :
+        super(context, trackSelectionFactory)
+
     override fun selectAudioTrack(
         mappedTrackInfo: MappedTrackInfo,
         rendererFormatSupports: Array<out Array<out IntArray>>,
