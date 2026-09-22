@@ -12,6 +12,7 @@ import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
 import com.github.libretube.R
 import com.github.libretube.api.JsonHelper
+import com.github.libretube.api.PipedAuthApi
 import com.github.libretube.api.RetrofitInstance
 import com.github.libretube.api.obj.Login
 import com.github.libretube.api.obj.Token

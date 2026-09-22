@@ -88,7 +88,7 @@ object PlayerHelper {
     // make the quality climb to HD within seconds and only drop after 30s of
     // sustained low bandwidth, and 85% of the measured bandwidth is used
     // instead of the stock 70%.
-    private const val PRIME_INITIAL_BITRATE_ESTIMATE = 4_500_000
+    private const val PRIME_INITIAL_BITRATE_ESTIMATE = 4_500_000L
     private const val PRIME_MAX_DURATION_FOR_QUALITY_DECREASE_MS = 30_000
     private const val PRIME_MIN_DURATION_FOR_QUALITY_INCREASE_MS = 4_000
     private const val PRIME_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS = 25_000

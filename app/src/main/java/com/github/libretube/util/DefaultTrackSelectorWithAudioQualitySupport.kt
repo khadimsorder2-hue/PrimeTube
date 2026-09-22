@@ -2,6 +2,7 @@ package com.github.libretube.util
 
 import android.content.Context
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.trackselection.ExoTrackSelection
 import com.github.libretube.constants.PreferenceKeys
@@ -13,15 +14,13 @@ import com.github.libretube.helpers.PreferenceHelper
  * the current preference set in [PreferenceHelper]
  */
 @androidx.annotation.OptIn(UnstableApi::class)
-class DefaultTrackSelectorWithAudioQualitySupport
-    (context: Context) :
-    DefaultTrackSelector(context) {
-
+class DefaultTrackSelectorWithAudioQualitySupport(
+    context: Context,
     // PrimeTube: ReVanced-style fast-reacting adaptive track selection -
-    // the bandwidth meter is supplied by ExoPlayer.Builder.setBandwidthMeter
-    constructor(context: Context, trackSelectionFactory: ExoTrackSelection.Factory) :
-        super(context, trackSelectionFactory)
-
+    // the bandwidth meter is supplied by ExoPlayer.Builder.setBandwidthMeter.
+    // The default keeps the stock ABR behaviour wherever the factory is omitted.
+    trackSelectionFactory: ExoTrackSelection.Factory = AdaptiveTrackSelection.Factory()
+) : DefaultTrackSelector(context, trackSelectionFactory) {
     override fun selectAudioTrack(
         mappedTrackInfo: MappedTrackInfo,
         rendererFormatSupports: Array<out Array<out IntArray>>,
